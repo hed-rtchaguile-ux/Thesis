@@ -26,7 +26,21 @@ app.use(express.json()); // Parses incoming JSON data
 
 // Connecting to the Database using our defined const
 mongoose.connect(DATABASE_CONNECTION_STRING)
-  .then(() => console.log('Successfully connected to MongoDB database: wedrings 💍'))
+  .then(async () => {
+    console.log('Successfully connected to MongoDB database: wedrings 💍');
+
+    try {
+      const collections = await mongoose.connection.db.listCollections().toArray();
+      const hasCollection = collections.some((collection) => collection.name === 'info_wedrings');
+
+      if (!hasCollection) {
+        await mongoose.connection.db.createCollection('info_wedrings');
+        console.log('Created MongoDB collection: info_wedrings');
+      }
+    } catch (collectionError) {
+      console.error('MongoDB collection setup error:', collectionError);
+    }
+  })
   .catch((error) => console.error('MongoDB connection error:', error));
 
 // Base route

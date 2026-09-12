@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useAuth } from './auth'
+import { useAuth } from '../auth'
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth()
