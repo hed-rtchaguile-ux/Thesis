@@ -56,10 +56,6 @@ export default function LoginPage() {
           <p className="intro-description">Book your marriage appointment easily, securely, and conveniently.</p>
         </div>
 
-        <div className="ring-art" aria-hidden="true">
-          <span className="ring ring-left" />
-          <span className="ring ring-right" />
-        </div>
       </section>
 
       <section className="login-panel">

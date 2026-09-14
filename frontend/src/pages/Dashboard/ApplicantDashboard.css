@@ -151,6 +151,7 @@
   font-size: 13px;
   text-align: left;
   border-radius: 8px;
+  box-shadow: none;
   cursor: pointer;
 }
 
@@ -289,7 +290,7 @@
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(125, 136, 168, 0.14);
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(40, 46, 67, 0.03);
+  box-shadow: none;
 }
 
 .card-icon {

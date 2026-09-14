@@ -15,10 +15,9 @@ function ApplicantLayout() {
 
   const sidebarItems = [
     { label: 'Dashboard', route: '/applicant/dashboard', icon: '⌂' },
-    { label: 'New Application', route: '/applicant/registration', icon: '✦' },
+    { label: 'New Application', route: '/applicant/registration', icon: '✎' },
     { label: 'My Appointments', route: '/applicant/dashboard', icon: '🗓' },
     { label: 'Profile', route: '/applicant/dashboard', icon: '◉' },
-    { label: 'Settings', route: '/applicant/dashboard', icon: '⚙' },
   ]
 
   return (

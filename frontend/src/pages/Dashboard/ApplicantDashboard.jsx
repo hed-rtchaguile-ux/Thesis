@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import './ApplicantDashboard.css'
@@ -6,46 +6,55 @@ import './ApplicantDashboard.css'
 export default function ApplicantDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [application, setApplication] = useState({
-    status: 'For Review',
-    items: 1,
-    appointment: 'None',
-  })
+  const displayName = user?.name || 'User'
+  const firstName = displayName.split(' ')[0]
+  const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
+  const [application, setApplication] = useState({ status: 'No applications', items: 0, appointment: 'None' })
 
-  function handleApply() {
-    setApplication({
-      status: 'For Review',
-      items: 1,
-      appointment: 'None',
-    })
-  }
+  useEffect(() => {
+    async function loadApplications() {
+      const response = await fetch(`/api/applications?applicantEmail=${encodeURIComponent(user.email)}`)
+      if (!response.ok) return
+
+      const applications = await response.json()
+      const latestApplication = applications[0]
+      setApplication({
+        status: latestApplication?.status || 'No applications',
+        items: applications.length,
+        appointment: latestApplication?.appointmentDate && latestApplication.appointmentDate !== 'To be assigned by office'
+          ? latestApplication.appointmentDate
+          : 'None',
+      })
+    }
+
+    loadApplications().catch(() => setApplication({ status: 'Unable to load', items: 0, appointment: 'None' }))
+  }, [user.email])
 
   const navigation = [
     { label: 'Dashboard', active: true, icon: '⌂' },
-    { label: 'New Application', icon: '▤' },
+    { label: 'New Application', icon: '✎' },
     { label: 'My Appointments', icon: '🗓' },
     { label: 'Profile', icon: '◉' },
-    { label: 'Settings', icon: '⚙' },
   ]
 
   return (
     <section className="applicant-main">
         <header className="topbar">
           <div className="topbar-main">
-            <h1>Good morning, John!</h1>
+            <h1>Welcome, {firstName}!</h1>
             <p>Here’s an overview of your marriage registration.</p>
           </div>
 
           <div className="topbar-user">
-            <div className="user-avatar">JD</div>
-            <span>John Dela Cruz</span>
+            <div className="user-avatar">{initials}</div>
+            <span>{displayName}</span>
             <button type="button" className="mini-button" aria-label="Open user menu">▾</button>
           </div>
         </header>
 
         <div className="dashboard-panel">
           <div className="welcome-banner">
-            <div className="banner-icon" aria-hidden="true">✦</div>
+            <div className="banner-icon" aria-hidden="true">▤</div>
             <div className="banner-copy">
               <h2>Start your forever, together.</h2>
               <p>Complete your application in 6 easy steps.</p>

@@ -13,6 +13,31 @@ const BACKEND_PORT = process.env.PORT || 5000;
 const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/wedrings';
 
+const applicationSchema = new mongoose.Schema({
+  applicantEmail: { type: String, required: true, index: true },
+  groomFullName: String,
+  groomDob: String,
+  groomGender: String,
+  groomCivilStatus: String,
+  groomMobile: String,
+  groomEmail: String,
+  brideFullName: String,
+  brideDob: String,
+  brideGender: String,
+  brideCivilStatus: String,
+  brideMobile: String,
+  brideEmail: String,
+  appointmentDate: String,
+  appointmentTime: String,
+  appointmentLocation: String,
+  paymentMethod: String,
+  paymentAmount: String,
+  documents: { type: Map, of: String },
+  status: { type: String, default: 'For Review' },
+}, { timestamps: true });
+
+const Application = mongoose.model('Application', applicationSchema, 'info_wedrings');
+
 // Applying the CORS options const
 const corsOptions = {
   origin: ALLOWED_FRONTEND_ORIGIN,
@@ -46,6 +71,29 @@ mongoose.connect(DATABASE_CONNECTION_STRING)
 // Base route
 app.get('/', (req, res) => {
   res.send('The WedRings API is fully active.');
+});
+
+app.post('/api/applications', async (req, res) => {
+  try {
+    const application = await Application.create({
+      ...req.body,
+      status: 'For Review',
+    });
+    res.status(201).json(application);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to save application.', error: error.message });
+  }
+});
+
+app.get('/api/applications', async (req, res) => {
+  try {
+    const applications = await Application.find({ applicantEmail: req.query.applicantEmail })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(applications);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load applications.', error: error.message });
+  }
 });
 
 // Launch server
