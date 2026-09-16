@@ -51,10 +51,7 @@ export default function LoginPage() {
           <span className="brand-name">WEDRINGS</span>
         </Link>
 
-        <div className="intro-content">
-          <h1>Your Journey to Forever Starts Here</h1>
-          <p className="intro-description">Book your marriage appointment easily, securely, and conveniently.</p>
-        </div>
+        
 
       </section>
 

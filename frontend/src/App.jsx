@@ -91,6 +91,9 @@ function App() {
 
         <Route element={<ProtectedRoute role="admin" />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/verified-records" element={<AdminDashboard view="verified" />} />
+          <Route path="/admin/all-applications" element={<AdminDashboard view="all" />} />
+          <Route path="/admin/new-submissions" element={<AdminDashboard view="new" />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

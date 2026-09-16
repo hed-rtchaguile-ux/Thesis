@@ -87,12 +87,38 @@ app.post('/api/applications', async (req, res) => {
 
 app.get('/api/applications', async (req, res) => {
   try {
-    const applications = await Application.find({ applicantEmail: req.query.applicantEmail })
+    const filter = req.query.applicantEmail ? { applicantEmail: req.query.applicantEmail } : {}
+    const applications = await Application.find(filter)
       .sort({ createdAt: -1 })
       .lean();
     res.json(applications);
   } catch (error) {
     res.status(500).json({ message: 'Unable to load applications.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/status', async (req, res) => {
+  try {
+    const allowedStatuses = ['For Review', 'Verified', 'Rejected'];
+    const { status } = req.body;
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid application status.' });
+    }
+
+    const application = await Application.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) {
+      return res.status(404).json({ message: 'Application not found.' });
+    }
+
+    res.json(application);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to update application status.', error: error.message });
   }
 });
 
