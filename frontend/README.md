@@ -1,5 +1,28 @@
 # React + Vite
 
+## Public Access
+
+The current temporary public link is:
+
+https://little-bobcats-shout.loca.lt
+
+If LocalTunnel displays a safety page, enter this IP address:
+
+49.150.198.238
+
+The link is available only while the frontend, backend, and LocalTunnel terminals are running. The URL may change when the tunnel is restarted.
+
+Start the services from the project root:
+
+```powershell
+cd Thesis\backend
+npm.cmd start
+
+cd ..\frontend
+npm.cmd run dev -- --port 5174
+npx.cmd --yes localtunnel --port 5174
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import logoImage from './assets/log.png'
@@ -15,6 +16,17 @@ function ApplicantLayout() {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [atlasStatus, setAtlasStatus] = useState('checking')
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to check backend status')
+        return response.json()
+      })
+      .then(({ atlasConnected }) => setAtlasStatus(atlasConnected ? 'connected' : 'unavailable'))
+      .catch(() => setAtlasStatus('unavailable'))
+  }, [])
 
   const sidebarItems = [
     { label: 'My Appointment', route: '/applicant/dashboard', icon: '⌂' },
@@ -49,6 +61,18 @@ function ApplicantLayout() {
           })}
         </nav>
 
+        <div className={`atlas-status atlas-status-${atlasStatus}`} role="status">
+          <span className="atlas-status-dot" aria-hidden="true" />
+          <span>
+            <strong>Atlas Database</strong>
+            <small>
+              {atlasStatus === 'checking' && 'Checking connection...'}
+              {atlasStatus === 'connected' && 'Connected'}
+              {atlasStatus === 'unavailable' && 'Unavailable'}
+            </small>
+          </span>
+        </div>
+
       </aside>
 
       <main className="app-content">
@@ -78,10 +102,15 @@ function App() {
 
         <Route element={<ProtectedRoute roles={['admin', 'superadmin']} />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/verified-records" element={<AdminDashboard view="verified" />} />
+          <Route path="/admin/all-applications" element={<AdminDashboard view="all" />} />
+          <Route path="/admin/new-submissions" element={<AdminDashboard view="new" />} />
+          <Route path="/admin/appointments" element={<AdminDashboard view="appointments" />} />
         </Route>
 
         <Route element={<ProtectedRoute role="superadmin" />}>
           <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
+          <Route path="/superadmin/appointments" element={<SuperAdminDashboard />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

@@ -329,7 +329,6 @@ export default function ApplicantRegistration() {
       })
     }
 
-    if (currentStep === 4 && !form.appointmentTime) errors.appointmentTime = 'Select an appointment time.'
     if (currentStep === 5) {
       if (!form.paymentMethod) errors.paymentMethod = 'Select a payment method.'
       if (!/^\d+(?:\.\d{1,2})?$/.test(form.paymentAmount.replace(/[^\d.]/g, ''))) {
@@ -344,11 +343,28 @@ export default function ApplicantRegistration() {
     setIsSubmitting(true)
     setSubmitError('')
 
+    const submittedForm = {
+      ...form,
+      appointmentDate: 'To be assigned by office',
+      appointmentTime: '',
+      groomFullName: [form.groomFirstName, form.groomMiddleName, form.groomLastName, form.groomSuffix].filter(Boolean).join(' ').trim(),
+      groomDob: [form.groomDobMonth, form.groomDobDay, form.groomDobYear].filter(Boolean).join('/'),
+      brideFullName: [form.brideFirstName, form.brideMiddleName, form.brideLastName, form.brideSuffix].filter(Boolean).join(' ').trim(),
+      brideDob: [form.brideDobMonth, form.brideDobDay, form.brideDobYear].filter(Boolean).join('/'),
+    }
+
     try {
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, applicantEmail: user.email, documents }),
+        body: JSON.stringify({
+          ...submittedForm,
+          applicantEmail: user.email,
+          documents: Object.fromEntries(Object.entries(documents).map(([key, value]) => [
+            key,
+            typeof value === 'string' ? value : value.dataUrl,
+          ])),
+        }),
       })
 
       if (!response.ok) throw new Error('Unable to submit application.')
@@ -363,11 +379,19 @@ export default function ApplicantRegistration() {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
 
-    setDocuments((current) => ({
-      ...current,
-      [key]: selectedFile.name,
-    }))
-    setValidationErrors((current) => ({ ...current, [key]: '' }))
+    const reader = new FileReader()
+    reader.onload = () => {
+      setDocuments((current) => ({
+        ...current,
+        [key]: {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          dataUrl: reader.result,
+        },
+      }))
+      setValidationErrors((current) => ({ ...current, [key]: '' }))
+    }
+    reader.readAsDataURL(selectedFile)
   }
 
   function autoFillDocuments() {
@@ -1140,7 +1164,7 @@ export default function ApplicantRegistration() {
             />
             <span className="upload-icon">⇪</span>
             <span className="upload-label">{label}</span>
-            <span className="upload-file-name">{documents[key] ? documents[key] : 'Choose File'}</span>
+            <span className="upload-file-name">{documents[key] ? (typeof documents[key] === 'string' ? documents[key] : documents[key].name) : 'Choose File'}</span>
             <FieldError message={validationErrors[key]} />
           </button>
         ))}
@@ -1157,19 +1181,8 @@ export default function ApplicantRegistration() {
         </div>
 
         <div className="field-group">
-          <label>Preferred Time *</label>
-          <select
-            value={form.appointmentTime}
-            onChange={(e) => updateField('appointmentTime', e.target.value)}
-            aria-invalid={Boolean(validationErrors.appointmentTime)}
-          >
-            <option value="">Select Time</option>
-            <option value="9:00 AM">9:00 AM</option>
-            <option value="10:30 AM">10:30 AM</option>
-            <option value="1:00 PM">1:00 PM</option>
-            <option value="3:30 PM">3:30 PM</option>
-          </select>
-          <FieldError message={validationErrors.appointmentTime} />
+          <label>Appointment Time</label>
+          <input value="To be assigned by office" readOnly />
         </div>
 
         <div className="field-group">

@@ -98,6 +98,132 @@
   margin-top: 18px;
 }
 
+.admin-appointment-filter {
+  margin-top: 18px;
+  padding: 15px 10px 0;
+  border-top: 1px solid rgba(200, 208, 234, 0.18);
+}
+
+.admin-appointment-filter h2 {
+  margin: 0 0 12px;
+  color: #eef1ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-appointment-filter label {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(234, 240, 255, 0.64);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.admin-appointment-filter input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 7px;
+  border: 1px solid rgba(200, 208, 234, 0.24);
+  border-radius: 6px;
+  color: #eef1ff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.admin-appointment-filter input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+}
+
+.admin-appointment-dates {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.admin-appointment-dates button {
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: rgba(234, 240, 255, 0.78);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-appointment-dates button:hover,
+.admin-appointment-dates button.selected {
+  border-color: rgba(200, 208, 234, 0.2);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.admin-appointment-dates p {
+  margin: 4px 0 0;
+  color: rgba(234, 240, 255, 0.55);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.admin-schedule-form {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(200, 208, 234, 0.18);
+}
+
+.admin-schedule-form h3 {
+  margin: 0 0 2px;
+  color: #eef1ff;
+  font-size: 11px;
+}
+
+.admin-schedule-form select,
+.admin-schedule-form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 7px;
+  border: 1px solid rgba(200, 208, 234, 0.24);
+  border-radius: 6px;
+  color: #eef1ff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+}
+
+.admin-schedule-form select option {
+  color: #2d3550;
+  background: #ffffff;
+}
+
+.admin-schedule-form input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+}
+
+.admin-schedule-form button {
+  padding: 8px;
+  border: 1px solid rgba(200, 208, 234, 0.25);
+  border-radius: 6px;
+  color: #1d2440;
+  background: #dfe5f1;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-schedule-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.admin-schedule-form p {
+  margin: 0;
+  color: #f0b4b4;
+  font-size: 10px;
+}
+
 .applicant-main {
   flex: 1;
   min-height: 100vh;
@@ -335,6 +461,277 @@
   font-weight: 700;
 }
 
+.application-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.application-view-button,
+.application-edit-button {
+  padding: 8px 10px;
+  border: 1px solid rgba(125, 136, 168, 0.24);
+  border-radius: 6px;
+  color: #53689f;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.application-edit-button {
+  border-color: #7f8dbd;
+  color: #ffffff;
+  background: #53689f;
+}
+
+.application-edit-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.application-document-alert {
+  grid-column: 1 / -1;
+  padding: 9px 10px;
+  border: 1px solid #e0b8b8;
+  border-radius: 6px;
+  background: #fff5f5;
+}
+
+.application-document-alert strong,
+.document-status-redo {
+  color: #9b4a4a;
+}
+
+.applicant-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(28, 36, 61, 0.48);
+}
+
+.applicant-modal {
+  width: min(100%, 820px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 14px;
+  background: #f7f8fc;
+  box-shadow: 0 24px 60px rgba(28, 36, 61, 0.24);
+}
+
+.applicant-modal-header,
+.applicant-modal-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.applicant-modal-header h2 {
+  margin: 5px 0 18px;
+  color: #2f3751;
+  font-size: 24px;
+}
+
+.applicant-modal-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(125, 136, 168, 0.25);
+  border-radius: 50%;
+  color: #53689f;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.applicant-edit-grid,
+.applicant-submission-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.applicant-edit-grid label {
+  display: grid;
+  gap: 6px;
+  color: #53689f;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.applicant-edit-grid input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid rgba(125, 136, 168, 0.24);
+  border-radius: 6px;
+  color: #2d3550;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.applicant-edit-documents {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(125, 136, 168, 0.14);
+}
+
+.applicant-edit-documents h3 {
+  margin: 0 0 12px;
+  color: #53689f;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.applicant-edit-documents label {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  color: #53689f;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.applicant-edit-documents input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 6px;
+  color: #2d3550;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.applicant-edit-documents small {
+  color: #697795;
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.applicant-modal-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.application-edit-error {
+  color: #9b4a4a;
+  font-size: 12px;
+}
+
+.applicant-submission-details > div {
+  padding: 16px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.applicant-submission-details h3 {
+  margin: 0 0 10px;
+  color: #53689f;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.applicant-submission-details p {
+  margin: 7px 0;
+  color: #697795;
+  font-size: 12px;
+}
+
+.applicant-submission-details p strong {
+  color: #2d3550;
+}
+
+.applicant-submission-details > button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.applicant-document-review {
+  grid-column: 1 / -1;
+}
+
+.applicant-document-review p {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) 1fr;
+  gap: 8px;
+  margin: 8px 0;
+  color: #697795;
+  font-size: 12px;
+}
+
+.applicant-document-review p strong {
+  color: #2d3550;
+}
+
+.document-redo-note {
+  grid-column: 2;
+  color: #9b4a4a;
+  font-size: 11px;
+}
+
+.admin-document-review-row {
+  padding: 9px 0;
+  border-top: 1px solid rgba(125, 136, 168, 0.12);
+}
+
+.admin-document-review-row p {
+  margin: 0 0 6px;
+}
+
+.document-review-status {
+  display: inline-block;
+  margin-bottom: 7px;
+  color: #697795;
+  font-size: 11px;
+}
+
+.document-review-status.accepted {
+  color: #39704b;
+}
+
+.document-review-status.needs-redo {
+  color: #9b4a4a;
+  font-weight: 700;
+}
+
+.admin-document-accept,
+.admin-document-flag {
+  margin-right: 6px;
+  padding: 5px 8px;
+  border: 1px solid #a9c5b1;
+  border-radius: 5px;
+  color: #39704b;
+  background: #eef8f0;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-document-flag {
+  border-color: #e0b8b8;
+  color: #9b4a4a;
+  background: #fff5f5;
+}
+
+.admin-document-accept:disabled,
+.admin-document-flag:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
 .quick-actions {
   margin-top: 20px;
 }
@@ -384,6 +781,605 @@
   line-height: 1;
 }
 
+.admin-applicant-shell {
+  background: #f4f4f2;
+}
+
+.admin-applicant-shell .topbar {
+  padding: 10px 4px 18px;
+}
+
+.admin-dashboard-panel {
+  height: auto;
+  min-height: calc(100vh - 150px);
+  padding: 0 0 34px;
+}
+
+.admin-dashboard-panel .summary-card {
+  background: #ffffff;
+  border-color: rgba(125, 136, 168, 0.14);
+  box-shadow: none;
+}
+
+.admin-review-panel {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: none;
+}
+
+.admin-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-section-heading h3 {
+  margin: 0;
+  color: #2f3751;
+  font-size: 18px;
+}
+
+.admin-view-button,
+.admin-details-button,
+.admin-verify-button,
+.admin-reject-button {
+  border: 1px solid rgba(125, 136, 168, 0.25);
+  border-radius: 6px;
+  padding: 8px 11px;
+  background: #ffffff;
+  color: #2d3550;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-view-button:hover,
+.admin-details-button:hover {
+  border-color: #7f8dbd;
+  background: #f2f5ff;
+}
+
+.admin-application-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid rgba(125, 136, 168, 0.14);
+}
+
+.admin-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #dfe5f1;
+  color: #41506c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-application-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-application-copy strong {
+  overflow: hidden;
+  color: #1c243d;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-application-copy small {
+  color: #697795;
+  font-size: 12px;
+}
+
+.admin-verify-button {
+  border-color: #aebadb;
+  color: #53689f;
+  background: #eef3ff;
+}
+
+.admin-reject-button {
+  border-color: #d7bcc8;
+  color: #7e526b;
+  background: #f9f0f5;
+}
+
+.admin-verify-button:disabled,
+.admin-reject-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-details-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 14px 48px;
+  padding: 17px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 8px;
+  background: #f7f8fc;
+}
+
+.admin-details-group h4 {
+  margin: 0 0 8px;
+  color: #53689f;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-details-group p {
+  margin: 5px 0;
+  color: #697795;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-details-group p strong {
+  color: #2d3550;
+}
+
+.admin-empty-state {
+  margin: 0;
+  padding: 28px 12px 10px;
+  color: #74838a;
+  font-size: 13px;
+  text-align: center;
+}
+
+.admin-appointment-panel {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-appointment-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.admin-appointment-panel-heading h2 {
+  margin: 4px 0 0;
+  color: #2f3751;
+  font-size: 20px;
+}
+
+.admin-appointment-panel-heading > span {
+  color: #697795;
+  font-size: 12px;
+}
+
+.admin-appointment-controls {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr 1fr auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.admin-appointment-controls label {
+  display: grid;
+  gap: 6px;
+  color: #53689f;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-appointment-controls input,
+.admin-appointment-controls select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 8px;
+  border: 1px solid rgba(125, 136, 168, 0.24);
+  border-radius: 6px;
+  color: #2d3550;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.admin-appointment-controls button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #53689f;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-appointment-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-appointment-dates-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.admin-appointment-dates-main button {
+  border: 1px solid rgba(125, 136, 168, 0.22);
+  color: #53689f;
+  background: #ffffff;
+}
+
+.admin-appointment-dates-main button.selected,
+.admin-appointment-dates-main button:hover {
+  color: #ffffff;
+  background: #53689f;
+}
+
+.admin-appointment-error {
+  margin: 10px 0 0;
+  color: #9b4a4a;
+  font-size: 12px;
+}
+
+.review-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(28, 36, 61, 0.48);
+}
+
+.review-modal {
+  width: min(100%, 980px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 14px;
+  background: #f7f8fc;
+  box-shadow: 0 24px 60px rgba(28, 36, 61, 0.24);
+}
+
+.review-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.review-modal-header h2 {
+  margin: 5px 0 0;
+  color: #2f3751;
+  font-size: 24px;
+}
+
+.review-modal-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(125, 136, 168, 0.25);
+  border-radius: 50%;
+  background: #ffffff;
+  color: #53689f;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.review-modal .admin-details-panel {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.review-page {
+  padding-top: 22px;
+}
+
+.review-page-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.review-page-heading,
+.review-form-heading,
+.review-decision-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.review-page-heading {
+  padding: 20px 0 24px;
+}
+
+.review-page-heading h2,
+.review-form-heading h2,
+.review-form-section h2 {
+  margin: 5px 0 0;
+  color: #2f3751;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.review-page-heading p {
+  margin: 6px 0 0;
+  color: #697795;
+  font-size: 13px;
+}
+
+.review-status {
+  padding: 8px 11px;
+  border: 1px solid #aebadb;
+  border-radius: 999px;
+  color: #53689f;
+  background: #eef3ff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.review-status-verified {
+  border-color: #a9c5b1;
+  color: #39704b;
+  background: #eef8f0;
+}
+
+.review-status-rejected {
+  border-color: #d7bcc8;
+  color: #7e526b;
+  background: #f9f0f5;
+}
+
+.review-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.review-detail-group,
+.review-comparison-form,
+.review-form-section {
+  padding: 20px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.review-detail-group h3,
+.review-check-form h3,
+.review-other-images h3 {
+  margin: 0 0 14px;
+  color: #53689f;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-detail-group p,
+.review-check-form p {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+  margin: 9px 0;
+  color: #697795;
+  font-size: 12px;
+}
+
+.review-detail-group p strong,
+.review-check-form p strong {
+  color: #2d3550;
+}
+
+.review-comparison-form,
+.review-form-section {
+  margin-top: 18px;
+}
+
+.review-comparison-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  margin-top: 18px;
+}
+
+.review-document-frame {
+  padding: 10px;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-document-frame img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  background: #eef1f8;
+}
+
+.review-document-frame small {
+  display: block;
+  margin-top: 9px;
+  color: #697795;
+  font-size: 11px;
+}
+
+.review-no-image {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  color: #697795;
+  background: #f7f8fc;
+  font-size: 12px;
+  text-align: center;
+}
+
+.review-check-form {
+  padding: 8px 0;
+}
+
+.review-other-images {
+  margin-top: 20px;
+}
+
+.review-other-images img {
+  width: 100px;
+  height: 76px;
+  margin: 0 9px 9px 0;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.review-form-section h2 {
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.review-decision-bar {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.review-decision-bar button {
+  padding: 11px 15px;
+}
+
+.admin-document-review {
+  grid-column: 1 / -1;
+  padding-top: 16px;
+  border-top: 1px solid rgba(125, 136, 168, 0.14);
+}
+
+.admin-document-review-heading,
+.admin-document-comparison {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.admin-review-kicker {
+  color: #7b86a7;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-document-review h4,
+.admin-comparison-details h5,
+.admin-other-documents h5 {
+  margin: 4px 0 0;
+  color: #2f3751;
+  font-size: 13px;
+}
+
+.admin-review-note {
+  color: #697795;
+  font-size: 11px;
+}
+
+.admin-document-comparison {
+  margin-top: 14px;
+}
+
+.admin-document-preview {
+  width: min(100%, 360px);
+  padding: 10px;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-document-preview img {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  background: #eef1f8;
+}
+
+.admin-document-preview p {
+  min-height: 100px;
+  margin: 0;
+  padding: 30px 14px;
+  color: #697795;
+  font-size: 12px;
+  text-align: center;
+}
+
+.admin-document-preview small {
+  display: block;
+  margin-top: 8px;
+  color: #697795;
+  font-size: 11px;
+}
+
+.admin-comparison-details {
+  flex: 1;
+  padding: 4px 0;
+}
+
+.admin-comparison-details h5 {
+  margin: 0 0 10px;
+  color: #53689f;
+  text-transform: uppercase;
+}
+
+.admin-comparison-details p {
+  margin: 7px 0;
+  color: #697795;
+  font-size: 12px;
+}
+
+.admin-comparison-details p strong {
+  color: #2d3550;
+}
+
+.admin-other-documents {
+  margin-top: 16px;
+}
+
+.admin-other-documents h5 {
+  margin-bottom: 9px;
+}
+
+.admin-other-documents img {
+  width: 82px;
+  height: 62px;
+  margin: 0 8px 8px 0;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
 @media (max-width: 980px) {
   .applicant-shell {
     display: block;
@@ -428,5 +1424,90 @@
 
   .sidebar-nav {
     grid-template-columns: 1fr;
+  }
+
+  .admin-review-panel {
+    padding: 16px;
+  }
+
+  .admin-appointment-panel-heading {
+    flex-direction: column;
+  }
+
+  .admin-appointment-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .application-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .applicant-modal-backdrop {
+    padding: 12px;
+  }
+
+  .applicant-modal {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .applicant-edit-grid,
+  .applicant-submission-details {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-application-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .admin-application-copy {
+    max-width: calc(100% - 50px);
+  }
+
+  .admin-details-button,
+  .admin-verify-button,
+  .admin-reject-button {
+    margin-left: 48px;
+  }
+
+  .admin-details-panel {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+  }
+
+  .admin-document-comparison {
+    flex-direction: column;
+  }
+
+  .admin-document-preview {
+    width: 100%;
+  }
+
+  .review-modal-backdrop {
+    padding: 12px;
+  }
+
+  .review-modal {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .review-page-heading,
+  .review-form-heading,
+  .review-decision-bar {
+    flex-direction: column;
+  }
+
+  .review-detail-grid,
+  .review-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-detail-group,
+  .review-comparison-form,
+  .review-form-section {
+    padding: 16px;
   }
 }
