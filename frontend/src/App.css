@@ -313,6 +313,14 @@
     .admin-applicant-shell { background: #f4f4f2; }
     .admin-applicant-shell .applicant-sidebar { flex: 0 0 176px; width: 176px; }
     .admin-applicant-shell .sidebar-nav { gap: 6px; }
+    .admin-applicant-shell .nav-item,
+    .admin-applicant-shell .brand-name,
+    .admin-view-button,
+    .admin-details-button,
+    .admin-verify-button,
+    .admin-reject-button {
+      text-decoration: none;
+    }
     .admin-applicant-shell .nav-item { padding: 11px 10px; }
     .admin-applicant-shell .brand-row { padding-left: 8px; padding-right: 8px; }
     .admin-applicant-shell .dashboard-panel { height: auto; min-height: calc(100vh - 140px); }
