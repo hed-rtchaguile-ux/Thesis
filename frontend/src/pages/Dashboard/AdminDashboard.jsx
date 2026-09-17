@@ -67,7 +67,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
     <main className="applicant-shell admin-applicant-shell">
       <aside className="applicant-sidebar">
         <div className="brand-row">
-          <Link className="brand-name" to="/admin/dashboard"><span className="brand-mark">W</span>WEDRINGS</Link>
+          <Link className="brand-name" to="/admin/dashboard"><span className="brand-mark">W</span></Link>
         </div>
         <nav className="sidebar-nav" aria-label="Admin navigation">
           <Link className={`nav-item ${view === 'dashboard' ? 'active' : ''}`} to="/admin/dashboard"><span className="nav-icon" aria-hidden="true">⌂</span><span>Dashboard</span></Link>
