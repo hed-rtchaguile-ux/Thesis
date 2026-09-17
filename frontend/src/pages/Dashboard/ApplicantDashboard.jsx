@@ -25,7 +25,7 @@ export default function ApplicantDashboard() {
         status: latestApplication?.status || 'No applications',
         items: fetchedApplications.length,
         appointment: latestApplication?.appointmentDate && latestApplication.appointmentDate !== 'To be assigned by office'
-          ? latestApplication.appointmentDate
+          ? `${latestApplication.appointmentDate}${latestApplication.appointmentTime ? ` at ${latestApplication.appointmentTime}` : ''}`
           : 'None',
       })
     }
@@ -56,37 +56,34 @@ export default function ApplicantDashboard() {
           </div>
 
           <div className="topbar-user">
-            <div className="user-avatar">{initials}</div>
-            <span>{displayName}</span>
+            <button
+              type="button"
+              className="user-trigger"
+              aria-label="Open user menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span className="user-avatar">{initials}</span>
+              <span>{displayName}</span>
+              <span className="mini-button" aria-hidden="true">▾</span>
+            </button>
 
-            <div className="user-menu-wrapper">
-              <button
-                type="button"
-                className="mini-button"
-                aria-label="Open user menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
-              >
-                ▾
-              </button>
-
-              {menuOpen && (
-                <div className="user-dropdown" role="menu" aria-label="User actions">
-                  <button type="button" className="dropdown-item" onClick={() => {
-                    setMenuOpen(false)
-                    navigate('/applicant/profile')
-                  }}>
-                    Profile
-                  </button>
-                  <button type="button" className="dropdown-item danger" onClick={() => {
-                    setMenuOpen(false)
-                    handleLogout()
-                  }}>
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
+            {menuOpen && (
+              <div className="user-dropdown" role="menu" aria-label="User actions">
+                <button type="button" className="dropdown-item" onClick={() => {
+                  setMenuOpen(false)
+                  navigate('/applicant/profile')
+                }}>
+                  Profile
+                </button>
+                <button type="button" className="dropdown-item danger" onClick={() => {
+                  setMenuOpen(false)
+                  handleLogout()
+                }}>
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

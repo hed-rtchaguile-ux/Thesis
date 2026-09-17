@@ -210,7 +210,7 @@ function FieldError({ message }) {
 }
 
 export default function ApplicantRegistration() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const displayName = user?.name || 'User'
   const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
@@ -220,6 +220,7 @@ export default function ApplicantRegistration() {
   const [validationErrors, setValidationErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
   const fileInputRefs = useRef({})
 
   const currentTitle = step === 1 ? 'Groom Info' : step === 2 ? 'Bride Info' : step === 3 ? 'Legal Docs' : step === 4 ? 'Appointment' : step === 5 ? 'Payment' : 'Review'
@@ -348,7 +349,7 @@ export default function ApplicantRegistration() {
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, applicantEmail: user.email, documents }),
+        body: JSON.stringify({ ...form, applicantEmail: user.email.trim().toLowerCase(), documents }),
       })
 
       if (!response.ok) throw new Error('Unable to submit application.')
@@ -618,6 +619,7 @@ export default function ApplicantRegistration() {
               </button>
             </div>
 
+            <div className="date-section-label">Name of {person === 'groom' ? 'Groom' : 'Bride'}</div>
             <div className="form-grid three-col">
               <div className="field-group">
                 <label>First Name *</label>
@@ -680,6 +682,7 @@ export default function ApplicantRegistration() {
               </div>
             </div>
 
+            <div className="date-section-label">Birthday</div>
             <div className="form-grid four-col">
               <div className="field-group">
                 <label>Day</label>
@@ -1386,10 +1389,36 @@ export default function ApplicantRegistration() {
       <main className="registration-main">
         <div className="registration-header">
           <h1>{step === 4 ? 'Marriage Registration' : currentTitle}</h1>
-          <div className="user-badge">
+          <div className="registration-user-menu">
+            <button
+              type="button"
+              className="user-badge"
+              aria-label="Open user menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
             <span className="user-avatar">{initials}</span>
             <span>{displayName}</span>
             <span className="chevron">▾</span>
+            </button>
+
+            {menuOpen && (
+              <div className="registration-user-dropdown" role="menu" aria-label="User actions">
+                <button type="button" onClick={() => {
+                  setMenuOpen(false)
+                  navigate('/applicant/profile')
+                }}>
+                  Profile
+                </button>
+                <button type="button" className="danger" onClick={() => {
+                  setMenuOpen(false)
+                  logout()
+                  navigate('/login')
+                }}>
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1446,12 +1475,6 @@ export default function ApplicantRegistration() {
             {step > 1 && (
               <button type="button" className="secondary-button" onClick={prevStep}>
                 ← Back
-              </button>
-            )}
-
-            {step === 6 && (
-              <button type="button" className="secondary-button print-button" onClick={() => window.print()}>
-                Print Form
               </button>
             )}
 

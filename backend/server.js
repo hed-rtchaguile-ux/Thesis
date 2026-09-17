@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 
 // Explicitly defining configuration using const
-const BACKEND_PORT = process.env.PORT || 5000;
+const BACKEND_PORT = process.env.PORT || 5001;
 const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/wedrings';
 
@@ -75,8 +75,14 @@ app.get('/', (req, res) => {
 
 app.post('/api/applications', async (req, res) => {
   try {
+    const applicantEmail = String(req.body.applicantEmail || '').trim().toLowerCase();
+    if (!applicantEmail) {
+      return res.status(400).json({ message: 'Applicant email is required.' });
+    }
+
     const application = await Application.create({
       ...req.body,
+      applicantEmail,
       status: 'For Review',
     });
     res.status(201).json(application);
@@ -87,7 +93,12 @@ app.post('/api/applications', async (req, res) => {
 
 app.get('/api/applications', async (req, res) => {
   try {
-    const applications = await Application.find({ applicantEmail: req.query.applicantEmail })
+    const applicantEmail = String(req.query.applicantEmail || '').trim().toLowerCase();
+    if (!applicantEmail) {
+      return res.status(400).json({ message: 'Applicant email is required.' });
+    }
+
+    const applications = await Application.find({ applicantEmail })
       .sort({ createdAt: -1 })
       .lean();
     res.json(applications);

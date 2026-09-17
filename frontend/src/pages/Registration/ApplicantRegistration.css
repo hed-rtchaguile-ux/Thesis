@@ -1,6 +1,7 @@
 .registration-page {
   display: flex;
   width: 100%;
+  min-width: 0;
   min-height: 100vh;
   margin: 0;
   background: #f4f4f2;
@@ -102,6 +103,7 @@
 
 .registration-main {
   flex: 1;
+  min-width: 0;
   padding: 14px 20px 18px;
   background: #f4f4f2;
   box-sizing: border-box;
@@ -127,9 +129,51 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #2d3245;
   font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.registration-user-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.registration-user-dropdown {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid rgba(120, 129, 158, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(45, 50, 69, 0.16);
+}
+
+.registration-user-dropdown button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #2d3245;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.registration-user-dropdown button:hover {
+  background: #f0f3fb;
+}
+
+.registration-user-dropdown button.danger {
+  color: #b14d4d;
 }
 
 .user-avatar {
@@ -150,6 +194,7 @@
 }
 
 .registration-card {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.28);
   border: 1px solid rgba(138, 145, 171, 0.18);
   border-radius: 14px;
@@ -202,6 +247,7 @@
 }
 
 .form-section {
+  min-width: 0;
   padding-top: 12px;
 }
 
@@ -375,6 +421,13 @@
   margin-top: 10px;
 }
 
+.date-section-label {
+  margin-top: 14px;
+  color: #4a536c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .single-line-field {
   margin-top: 12px;
 }
@@ -515,6 +568,7 @@
 }
 
 .official-print-form {
+  min-width: 0;
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -844,12 +898,15 @@
 
   .two-box-layout,
   .two-col,
+  .dissolution-table {
+    grid-template-columns: 1fr;
+  }
+
   .three-col,
   .four-col,
   .document-grid,
-  .extended-form-grid,
-  .dissolution-table {
-    grid-template-columns: 1fr;
+  .extended-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stepper {
@@ -859,17 +916,78 @@
 }
 
 @media (max-width: 680px) {
+  .registration-main {
+    padding: 62px 10px 20px;
+  }
+
+  .registration-card {
+    padding: 10px 12px 12px;
+    border-radius: 10px;
+  }
+
   .registration-header {
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    gap: 8px;
   }
 
   .registration-header h1 {
+    min-width: 0;
+    margin-right: auto;
     font-size: 24px;
+  }
+
+  .user-badge {
+    flex-shrink: 0;
+    margin-left: auto;
   }
 
   .stepper {
     grid-template-columns: 1fr;
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+
+  .formal-box {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .formal-box-title {
+    font-size: 17px;
+  }
+
+  .auto-fill-row {
+    align-items: flex-start;
+  }
+
+  .auto-fill-button {
+    flex-shrink: 0;
+  }
+
+  .three-col,
+  .four-col,
+  .document-grid,
+  .extended-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .official-print-form {
+    padding: 10px;
+  }
+
+  .official-header-line,
+  .official-doc-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .official-header-meta.right,
+  .official-doc-item strong {
+    text-align: left;
+  }
+
+  .official-title-row span {
+    font-size: 16px;
   }
 
   .form-actions {

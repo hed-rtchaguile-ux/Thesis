@@ -131,11 +131,22 @@
 .topbar-user {
   display: flex;
   align-items: center;
-  gap: 10px;
   color: #2a2f42;
   font-size: 13px;
   font-weight: 600;
   position: relative;
+}
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .user-avatar {
@@ -190,12 +201,8 @@
 }
 
 .mini-button {
-  border: 0;
-  background: transparent;
   color: #404c68;
   font-size: 14px;
-  cursor: pointer;
-  padding: 0;
 }
 
 .dashboard-panel {
@@ -414,8 +421,37 @@
   }
 
   .topbar {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
+    gap: 10px;
+    padding-top: 6px;
+  }
+
+  .topbar-main {
+    min-width: 0;
+    padding-left: 52px;
+  }
+
+  .topbar-main h1 {
+    font-size: 27px;
+    line-height: 1.1;
+  }
+
+  .topbar-main p {
+    line-height: 1.35;
+  }
+
+  .topbar-user {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding-top: 2px;
+  }
+
+  .topbar-user > span {
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .welcome-banner {

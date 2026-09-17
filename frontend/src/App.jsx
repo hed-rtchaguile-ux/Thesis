@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import logoImage from './assets/log.png'
@@ -8,6 +9,7 @@ import ApplicantDashboard from './pages/Dashboard/ApplicantDashboard'
 import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
 import ApplicantProfile from './pages/ApplicantProfile'
 import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
+import RegisterPage from './pages/register/RegisterPage'
 import LoginPage from './pages/login/LoginPage'
 import ProtectedRoute from './pages/ProtectedRoute'
 
@@ -15,6 +17,7 @@ function ApplicantLayout() {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const sidebarItems = [
     { label: 'My Appointment', route: '/applicant/dashboard', icon: '⌂' },
@@ -23,7 +26,28 @@ function ApplicantLayout() {
 
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
+      <button
+        type="button"
+        className="mobile-menu-button"
+        aria-label="Open navigation menu"
+        aria-expanded={sidebarOpen}
+        onClick={() => setSidebarOpen((open) => !open)}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
+
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close navigation menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="brand-row">
           <span className="brand-mark" aria-label="WedRings logo">
             <img src={logoImage} alt="WedRings logo" className="brand-logo" />
@@ -40,7 +64,10 @@ function ApplicantLayout() {
                 key={item.label}
                 type="button"
                 className={`nav-item ${active ? 'active' : ''}`}
-                onClick={() => navigate(item.route)}
+                onClick={() => {
+                  setSidebarOpen(false)
+                  navigate(item.route)
+                }}
               >
                 <span className="nav-icon" aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
@@ -64,6 +91,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
         <Route path="/admin/login" element={<Navigate to="/login" replace />} />
         <Route path="/superadmin/login" element={<Navigate to="/login" replace />} />

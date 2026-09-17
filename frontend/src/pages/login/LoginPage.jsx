@@ -77,7 +77,7 @@ export default function LoginPage() {
             <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Log In'}</button>
           </form>
 
-          <p className="signup-link">Don't have an account? <a href="#">Register</a></p>
+          <p className="signup-link">Don't have an account? <Link to="/register">Register</Link></p>
 
           <details className="demo-access">
             <summary>View demo access</summary>
