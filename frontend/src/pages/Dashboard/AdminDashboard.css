@@ -1,0 +1,204 @@
+.admin-shell {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  background: #f4f4f2;
+  overflow: visible;
+}
+
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  padding: 18px 12px 14px;
+  background: linear-gradient(180deg, #1d2440 0%, #1a2139 100%);
+  color: #eef1ff;
+}
+
+.admin-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 16px;
+  border-bottom: 1px solid rgba(200, 208, 234, 0.18);
+}
+
+.admin-brand-row .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.admin-brand-row .brand-name {
+  color: #eef1ff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.admin-main {
+  flex: 1;
+  min-height: 100vh;
+  padding: 12px 20px 16px;
+  background: #f4f4f2;
+  box-sizing: border-box;
+}
+
+.admin-welcome-banner {
+  background: linear-gradient(135deg, #edf0ff 0%, #e2e8fb 100%);
+  border: 1px solid rgba(127, 141, 196, 0.2);
+}
+
+.admin-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.admin-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 92px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 12px;
+}
+
+.admin-summary-card .summary-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-summary-card .summary-copy span {
+  color: #6e7895;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-summary-card .summary-copy strong {
+  color: #2c3041;
+  font-size: clamp(26px, 2vw, 36px);
+  letter-spacing: -0.05em;
+}
+
+.admin-summary-card .summary-copy small {
+  color: #6d7487;
+  font-size: 12px;
+}
+
+.admin-summary-card .summary-copy .trend {
+  color: #4b8060;
+  font-weight: 700;
+}
+
+.admin-summary-card .summary-copy .warning {
+  color: #b1704e;
+  font-weight: 700;
+}
+
+.admin-main .review-list {
+  margin-top: 38px;
+  border-top: 1px solid rgba(125, 136, 168, 0.18);
+  padding-top: 10px;
+}
+
+.admin-main .section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0 14px;
+}
+
+.admin-main .section-heading h2 {
+  margin: 0;
+  color: #2c3041;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.admin-main .outline-button {
+  border: 1px solid rgba(125, 136, 168, 0.24);
+  background: transparent;
+  color: #2c3041;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-main .application-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 0;
+  border-top: 1px solid rgba(125, 136, 168, 0.14);
+}
+
+.admin-main .avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dfe7f3;
+  color: #3d4d68;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-main .application-row strong {
+  display: block;
+  color: #2c3041;
+  font-size: 14px;
+}
+
+.admin-main .application-row p {
+  margin: 4px 0 0;
+  color: #6d7487;
+  font-size: 12px;
+}
+
+.admin-main .review-status {
+  margin-left: auto;
+  color: #3d4d68;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .admin-shell {
+    display: block;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+  }
+
+  .admin-main {
+    padding: 12px 18px 18px;
+  }
+
+  .admin-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-main .section-heading {
+    align-items: center;
+  }
+
+  .admin-main .review-status {
+    text-align: right;
+  }
+}

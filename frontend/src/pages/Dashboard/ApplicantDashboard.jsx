@@ -10,32 +10,42 @@ export default function ApplicantDashboard() {
   const firstName = displayName.split(' ')[0]
   const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
   const [application, setApplication] = useState({ status: 'No applications', items: 0, appointment: 'None' })
+  const [applications, setApplications] = useState([])
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     async function loadApplications() {
       const response = await fetch(`/api/applications?applicantEmail=${encodeURIComponent(user.email)}`)
       if (!response.ok) return
 
-      const applications = await response.json()
-      const latestApplication = applications[0]
+      const fetchedApplications = await response.json()
+      const latestApplication = fetchedApplications[0]
+      setApplications(fetchedApplications)
       setApplication({
         status: latestApplication?.status || 'No applications',
-        items: applications.length,
+        items: fetchedApplications.length,
         appointment: latestApplication?.appointmentDate && latestApplication.appointmentDate !== 'To be assigned by office'
           ? latestApplication.appointmentDate
           : 'None',
       })
     }
 
-    loadApplications().catch(() => setApplication({ status: 'Unable to load', items: 0, appointment: 'None' }))
+    loadApplications().catch(() => {
+      setApplications([])
+      setApplication({ status: 'Unable to load', items: 0, appointment: 'None' })
+    })
   }, [user.email])
 
   const navigation = [
-    { label: 'Dashboard', active: true, icon: '⌂' },
+    { label: 'My Appointments',active: true, icon: '🗓' },
     { label: 'New Application', icon: '✎' },
-    { label: 'My Appointments', icon: '🗓' },
     { label: 'Profile', icon: '◉' },
   ]
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <section className="applicant-main">
@@ -48,7 +58,35 @@ export default function ApplicantDashboard() {
           <div className="topbar-user">
             <div className="user-avatar">{initials}</div>
             <span>{displayName}</span>
-            <button type="button" className="mini-button" aria-label="Open user menu">▾</button>
+
+            <div className="user-menu-wrapper">
+              <button
+                type="button"
+                className="mini-button"
+                aria-label="Open user menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                ▾
+              </button>
+
+              {menuOpen && (
+                <div className="user-dropdown" role="menu" aria-label="User actions">
+                  <button type="button" className="dropdown-item" onClick={() => {
+                    setMenuOpen(false)
+                    navigate('/applicant/profile')
+                  }}>
+                    Profile
+                  </button>
+                  <button type="button" className="dropdown-item danger" onClick={() => {
+                    setMenuOpen(false)
+                    handleLogout()
+                  }}>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -86,6 +124,34 @@ export default function ApplicantDashboard() {
               </div>
             </article>
           </div>
+
+          {applications.length > 0 && (
+            <div className="application-history">
+              <h3>My Applications</h3>
+              <div className="application-list">
+                {applications.map((item, index) => {
+                  const coupleNames = [item.groomFullName, item.brideFullName].filter(Boolean).join(' & ') || 'Couple'
+
+                  return (
+                    <div key={`${item._id || item.applicantEmail || index}`} className="application-item">
+                      <div>
+                        <span className="application-label">Couple</span>
+                        <strong>{coupleNames}</strong>
+                      </div>
+                      <div>
+                        <span className="application-label">Status</span>
+                        <strong>{item.status || 'For Review'}</strong>
+                      </div>
+                      <div>
+                        <span className="application-label">Appointment</span>
+                        <strong>{item.appointmentDate || 'To be assigned by office'}</strong>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="quick-actions">
             <h3>Quick Actions</h3>

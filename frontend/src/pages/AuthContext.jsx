@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
     const signedInUser = { name: account.name, email: account.email, role }
     sessionStorage.setItem('wedrings-user', JSON.stringify(signedInUser))
     setUser(signedInUser)
-    return { success: true }
+    return { success: true, role }
   }
 
   function logout() {
