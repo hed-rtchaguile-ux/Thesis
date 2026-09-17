@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { demoAccounts, useAuth } from '../auth'
+import logoImage from '../../assets/log.png'
 import './LoginPage.css'
 
 export default function LoginPage() {
@@ -37,16 +38,7 @@ export default function LoginPage() {
       <section className="login-intro">
         <Link className="brand" to="/">
           <span className="brand-mark" aria-label="WedRings logo">
-            <svg viewBox="0 0 90 78" aria-hidden="true">
-              <path className="logo-heart" d="M45 66 C25 52, 6 40, 6 22 C6 12, 14 6, 22 6 C30 6, 36 11, 41 18 C46 11, 52 6, 60 6 C68 6, 76 12, 76 22 C76 40, 57 52, 45 66Z" />
-              <path className="logo-ring" d="M28 40 C28 29, 35 22, 45 22 C55 22, 62 29, 62 40 C62 50, 54 58, 45 58 C35 58, 28 50, 28 40Z" />
-              <path className="logo-ring" d="M17 38 C17 18, 30 10, 45 10 C60 10, 73 18, 73 38 C73 50, 62 60, 45 60 C28 60, 17 50, 17 38Z" opacity="0.65" />
-              <path className="logo-heart" d="M45 64 C41 60, 37 57, 32 53 C24 47, 18 41, 18 31 C18 24, 23 18, 30 18 C35 18, 39 20, 43 24 C45 26, 47 26, 49 24 C53 20, 57 18, 62 18 C69 18, 74 24, 74 31 C74 41, 68 47, 60 53 C55 57, 51 60, 45 64Z" opacity="0.12" />
-              <path className="logo-crown" d="M26 15 L34 8 L42 15 L50 8 L58 15 L64 13 L66 24 L24 24 L26 15Z" />
-              <circle className="logo-crown" cx="28" cy="13" r="2.1" />
-              <circle className="logo-crown" cx="45" cy="8" r="2.1" />
-              <circle className="logo-crown" cx="62" cy="13" r="2.1" />
-            </svg>
+            <img src={logoImage} alt="WedRings logo" className="brand-logo" />
           </span>
           <span className="brand-name">WEDRINGS</span>
         </Link>
@@ -91,6 +83,7 @@ export default function LoginPage() {
             <summary>View demo access</summary>
             <p><strong>Applicant:</strong> {demoAccounts.applicant.email}<br />{demoAccounts.applicant.password}</p>
             <p><strong>Admin:</strong> {demoAccounts.admin.email}<br />{demoAccounts.admin.password}</p>
+            <p><strong>Super Admin:</strong> {demoAccounts.superadmin.email}<br />{demoAccounts.superadmin.password}</p>
           </details>
         </div>
       </section>

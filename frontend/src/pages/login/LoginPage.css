@@ -50,29 +50,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 12px;
 }
 
-.brand-mark svg {
+.brand-logo {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.brand-mark .logo-crown,
-.brand-mark .logo-heart,
-.brand-mark .logo-ring {
-  stroke: #c8ad7b;
-  stroke-width: 3;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.brand-mark .logo-ring {
-  stroke-width: 2.8;
+  object-fit: contain;
 }
 
 .brand-name {

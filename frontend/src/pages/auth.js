@@ -17,4 +17,9 @@ export const demoAccounts = {
     password: 'Admin123!',
     name: 'Portal Administrator',
   },
+  superadmin: {
+    email: 'superadmin@wedrings.test',
+    password: 'SuperAdmin123!',
+    name: 'Super Administrator',
+  },
 }
