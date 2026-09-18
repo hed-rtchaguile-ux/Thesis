@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import './ApplicantDashboard.css'
+import OfficialApplicationForm from './OfficialApplicationForm'
 
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
@@ -67,13 +68,23 @@ export default function SuperAdminDashboard() {
     }
   }
 
-  async function updateDocumentReview(applicationId, documentKey, reviewStatus) {
+  function confirmRejection(applicationId) {
+    const confirmed = window.confirm('Reject this submitted application? The applicant will be notified and asked to make the required changes.')
+    if (confirmed) updateApplicationStatus(applicationId, 'Rejected')
+  }
+
+  function confirmVerification(applicationId) {
+    const confirmed = window.confirm('Verify this submitted application? This finalizes the application as verified.')
+    if (confirmed) updateApplicationStatus(applicationId, 'Verified')
+  }
+
+  async function updateDocumentReview(applicationId, documentKey, reviewStatus, reviewNote = '') {
     setUpdatingDocumentKey(documentKey)
     try {
       const response = await fetch(`/api/applications/${applicationId}/documents/${documentKey}/review`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewStatus }),
+        body: JSON.stringify({ reviewStatus, reviewNote }),
       })
       if (!response.ok) throw new Error('Unable to update document review.')
       const updatedApplication = await response.json()
@@ -228,8 +239,8 @@ export default function SuperAdminDashboard() {
                       <small>{application.applicantEmail}</small>
                     </div>
                     <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
-                    <button className="admin-verify-button" type="button" onClick={() => updateApplicationStatus(application._id, 'Verified')} disabled={application.status === 'Verified' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Verified' ? 'Verified' : 'Verify'}</button>
-                    <button className="admin-reject-button" type="button" onClick={() => updateApplicationStatus(application._id, 'Rejected')} disabled={application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Rejected' ? 'Rejected' : 'Reject'}</button>
+                    <button className="admin-verify-button" type="button" onClick={() => confirmVerification(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Verified' ? 'Verified' : 'Verify'}</button>
+                    <button className="admin-reject-button" type="button" onClick={() => confirmRejection(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Rejected' ? 'Rejected' : 'Reject'}</button>
                   </div>
 
                 </div>
@@ -257,17 +268,23 @@ export default function SuperAdminDashboard() {
 }
 
 function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview }) {
+  const [isPrintFormOpen, setIsPrintFormOpen] = useState(false)
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
   const imageDocuments = documents.filter(([, value]) => typeof value === 'string' && value.startsWith('data:image/'))
+
+  function requestDocumentRedo(documentKey) {
+    const reviewNote = window.prompt('What does the applicant need to redo for this document?')
+    if (reviewNote?.trim()) onDocumentReview(application._id, documentKey, 'Needs Redo', reviewNote.trim())
+  }
 
   return (
     <div className="admin-details-panel">
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Date:</strong> {application.appointmentDate || 'Not provided'}</p><p><strong>Time:</strong> {application.appointmentTime || 'Not provided'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
-      <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><p><strong>{key}:</strong> {value}</p><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Needs Redo')}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
+      <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><p><strong>{key}:</strong> {value}</p><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">
         <div className="admin-document-review-heading">
           <div>
@@ -296,6 +313,8 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
         </div>
         {imageDocuments.length > 0 && <div className="admin-other-documents"><h5>Other document images</h5>{imageDocuments.filter(([key]) => key !== 'psaMarriageLicense').map(([key, value]) => <img key={key} src={value} alt={`Submitted ${key}`} />)}</div>}
       </div>
+      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => setIsPrintFormOpen(true)}>Print form</button></div>
+      {isPrintFormOpen && <div className="print-form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsPrintFormOpen(false) }}><section className="print-form-modal" role="dialog" aria-modal="true" aria-label="Printable application form"><div className="print-form-actions"><button type="button" className="admin-details-button" onClick={() => window.print()}>Print</button><button type="button" className="review-modal-close" aria-label="Close print form" onClick={() => setIsPrintFormOpen(false)}>×</button></div><OfficialApplicationForm application={application} /></section></div>}
     </div>
   )
 }

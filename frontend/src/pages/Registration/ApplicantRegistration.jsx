@@ -359,6 +359,7 @@ export default function ApplicantRegistration() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...submittedForm,
+          applicationData: submittedForm,
           applicantEmail: user.email,
           documents: Object.fromEntries(Object.entries(documents).map(([key, value]) => [
             key,
@@ -1459,12 +1460,6 @@ export default function ApplicantRegistration() {
             {step > 1 && (
               <button type="button" className="secondary-button" onClick={prevStep}>
                 ← Back
-              </button>
-            )}
-
-            {step === 6 && (
-              <button type="button" className="secondary-button print-button" onClick={() => window.print()}>
-                Print Form
               </button>
             )}
 

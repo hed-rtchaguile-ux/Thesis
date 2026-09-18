@@ -371,6 +371,88 @@
   margin-top: 18px;
 }
 
+.applicant-notifications {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #e0b8b8;
+  border-radius: 12px;
+  background: #fff7f7;
+}
+
+.applicant-notifications-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.applicant-notifications-heading h3 {
+  margin: 3px 0 0;
+  color: #7e3b3b;
+  font-size: 16px;
+}
+
+.notification-count {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #a84e4e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.applicant-notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.applicant-notification {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid rgba(168, 78, 78, 0.2);
+  border-radius: 8px;
+  color: #713c3c;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.applicant-notification:hover {
+  border-color: rgba(168, 78, 78, 0.45);
+  background: #fffafa;
+}
+
+.notification-icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #a84e4e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.notification-action {
+  color: #8e4343;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .summary-card {
   display: flex;
   align-items: center;
@@ -1089,6 +1171,44 @@
   cursor: pointer;
 }
 
+.admin-print-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.print-form-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow: auto;
+  padding: 28px;
+  background: rgba(21, 28, 45, 0.68);
+}
+
+.print-form-modal {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 18px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.print-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media print {
+  body * { visibility: hidden; }
+  .print-form-modal, .print-form-modal * { visibility: visible; }
+  .print-form-modal { position: absolute; inset: 0; width: 100%; padding: 0; }
+  .print-form-actions { display: none !important; }
+}
+
 .review-modal .admin-details-panel {
   margin: 0;
   background: rgba(255, 255, 255, 0.78);
@@ -1406,16 +1526,37 @@
 
 @media (max-width: 680px) {
   .applicant-main {
-    padding: 20px 18px 26px;
+    min-height: auto;
+    padding: 16px 14px 24px;
   }
 
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+    gap: 10px;
+  }
+
+  .topbar-main h1 {
+    font-size: 28px;
+  }
+
+  .topbar-user {
+    width: 100%;
+  }
+
+  .user-menu-wrapper {
+    margin-left: auto;
+  }
+
+  .dashboard-panel {
+    height: auto;
+    min-height: 0;
   }
 
   .welcome-banner {
     padding: 18px 16px;
+    align-items: flex-start;
+    gap: 12px;
   }
 
   .banner-copy h2 {
@@ -1443,6 +1584,24 @@
     flex-direction: column;
   }
 
+  .applicant-notifications {
+    padding: 14px;
+  }
+
+  .applicant-notification {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .notification-action {
+    grid-column: 2;
+  }
+
+  .application-view-button,
+  .application-edit-button {
+    width: 100%;
+    min-height: 42px;
+  }
+
   .applicant-modal-backdrop {
     padding: 12px;
   }
@@ -1452,9 +1611,35 @@
     padding: 16px;
   }
 
+  .applicant-modal-header h2 {
+    font-size: 21px;
+  }
+
   .applicant-edit-grid,
   .applicant-submission-details {
     grid-template-columns: 1fr;
+  }
+
+  .applicant-submission-details > button {
+    justify-self: stretch;
+  }
+
+  .applicant-modal-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .applicant-modal-actions .application-view-button,
+  .applicant-modal-actions .application-edit-button {
+    width: 100%;
+  }
+
+  .applicant-document-review p {
+    grid-template-columns: 1fr;
+  }
+
+  .document-redo-note {
+    grid-column: auto;
   }
 
   .admin-application-row {

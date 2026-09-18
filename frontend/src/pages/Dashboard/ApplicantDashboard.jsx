@@ -12,6 +12,10 @@ function formatAppointmentDate(value, time = '') {
   return time ? `${formattedDate} at ${time}` : formattedDate
 }
 
+function formatDocumentName(key) {
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
+}
+
 export default function ApplicantDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -47,11 +51,61 @@ export default function ApplicantDashboard() {
       })
     }
 
-    loadApplications().catch(() => {
+    const refreshApplications = () => loadApplications().catch(() => {
       setApplications([])
       setApplication({ status: 'Unable to load', items: 0, appointment: 'None' })
     })
+
+    refreshApplications()
+    const refreshTimer = window.setInterval(refreshApplications, 30000)
+    return () => window.clearInterval(refreshTimer)
   }, [user.email])
+
+  const applicantNotifications = applications.flatMap((applicationRecord) => {
+    const coupleNames = [applicationRecord.groomFullName, applicationRecord.brideFullName].filter(Boolean).join(' & ') || 'your application'
+    const notificationReads = applicationRecord.notificationReads || {}
+    const notifications = []
+
+    if (!notificationReads.appointment && applicationRecord.appointmentDate && applicationRecord.appointmentDate !== 'To be assigned by office') {
+      notifications.push({
+        id: `${applicationRecord._id}-appointment`,
+        notificationKey: 'appointment',
+        application: applicationRecord,
+        editing: false,
+        action: 'View appointment',
+        message: `Your appointment for ${coupleNames} is scheduled for ${formatAppointmentDate(applicationRecord.appointmentDate, applicationRecord.appointmentTime)}.`,
+      })
+    }
+
+    if (!notificationReads.rejected && applicationRecord.status === 'Rejected') {
+      notifications.push({
+        id: `${applicationRecord._id}-rejected`,
+        notificationKey: 'rejected',
+        application: applicationRecord,
+        editing: true,
+        action: 'Update',
+        message: `Your application for ${coupleNames} was rejected. Please review and update it before submitting again.`,
+      })
+    }
+
+    getFlaggedDocuments(applicationRecord).forEach((documentKey) => {
+      const notificationKey = `redo-${documentKey}`
+      if (notificationReads[notificationKey]) return
+      const reviewNote = applicationRecord.documentReviewNotes?.[documentKey]
+      notifications.push({
+        id: `${applicationRecord._id}-${documentKey}-redo`,
+        notificationKey,
+        application: applicationRecord,
+        editing: true,
+        action: 'Update',
+        message: reviewNote
+          ? `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}. Reviewer note: ${reviewNote}`
+          : `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}.`,
+      })
+    })
+
+    return notifications
+  })
 
   const navigation = [
     { label: 'My Appointments',active: true, icon: '🗓' },
@@ -83,6 +137,20 @@ export default function ApplicantDashboard() {
       brideEmail: applicationRecord.brideEmail || '',
     })
     setEditDocuments(applicationRecord.documents || {})
+  }
+
+  async function openNotification(notification) {
+    openApplication(notification.application, notification.editing)
+    try {
+      const response = await fetch(`/api/applications/${notification.application._id}/notifications/${notification.notificationKey}/read`, { method: 'PUT' })
+      if (!response.ok) throw new Error('Unable to mark notification as read.')
+      const updatedApplication = await response.json()
+      setApplications((currentApplications) => currentApplications.map((applicationRecord) => (
+        applicationRecord._id === updatedApplication._id ? updatedApplication : applicationRecord
+      )))
+    } catch {
+      // The notification remains visible after the next refresh if it could not be acknowledged.
+    }
   }
 
   async function saveApplicationEdit(event) {
@@ -187,6 +255,24 @@ export default function ApplicantDashboard() {
             </div>
           </div>
 
+          {applicantNotifications.length > 0 && (
+            <section className="applicant-notifications" aria-live="polite" aria-label="Application updates">
+              <div className="applicant-notifications-heading">
+                <div><span className="application-label">Action needed</span><h3>Application updates</h3></div>
+                <span className="notification-count">{applicantNotifications.length}</span>
+              </div>
+              <div className="applicant-notification-list">
+                {applicantNotifications.map((notification) => (
+                  <button key={notification.id} type="button" className="applicant-notification" onClick={() => openNotification(notification)}>
+                    <span className="notification-icon" aria-hidden="true">!</span>
+                    <span>{notification.message}</span>
+                    <span className="notification-action">{notification.action}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           <div className="summary-grid">
             <article className="summary-card">
               <div className="card-icon" aria-hidden="true">▣</div>
@@ -290,7 +376,7 @@ export default function ApplicantDashboard() {
                   <div><h3>Groom information</h3><p><strong>Name:</strong> {selectedApplication.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {selectedApplication.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {selectedApplication.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {selectedApplication.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {selectedApplication.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {selectedApplication.groomEmail || 'Not provided'}</p></div>
                   <div><h3>Bride information</h3><p><strong>Name:</strong> {selectedApplication.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {selectedApplication.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {selectedApplication.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {selectedApplication.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {selectedApplication.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {selectedApplication.brideEmail || 'Not provided'}</p></div>
                   <div><h3>Appointment</h3><p><strong>Date:</strong> {formatAppointmentDate(selectedApplication.appointmentDate)}</p><p><strong>Time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p><p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p><p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p></div>
-                  <div className="applicant-document-review"><h3>Document review</h3>{Object.entries(selectedApplication.documents || {}).map(([key]) => { const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'; return <p key={key}><strong>{key}:</strong> <span className={reviewStatus === 'Needs Redo' ? 'document-status-redo' : ''}>{reviewStatus}</span>{reviewStatus === 'Needs Redo' && <small className="document-redo-note">Please replace this document and save your changes.</small>}</p> })}</div>
+                  <div className="applicant-document-review"><h3>Document review</h3>{Object.entries(selectedApplication.documents || {}).map(([key]) => { const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'; const reviewNote = selectedApplication.documentReviewNotes?.[key]; return <p key={key}><strong>{key}:</strong> <span className={reviewStatus === 'Needs Redo' ? 'document-status-redo' : ''}>{reviewStatus}</span>{reviewStatus === 'Needs Redo' && <small className="document-redo-note">{reviewNote || 'Please replace this document and save your changes.'}</small>}</p> })}</div>
                   <button type="button" className="application-edit-button" onClick={() => setIsEditingApplication(true)}>Edit information</button>
                 </div>
               )}

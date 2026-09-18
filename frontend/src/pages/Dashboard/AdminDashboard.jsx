@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import './ApplicantDashboard.css'
+import OfficialApplicationForm from './OfficialApplicationForm'
 
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
@@ -111,14 +112,14 @@ export default function AdminDashboard({ view = 'dashboard' }) {
     <main className="applicant-shell admin-applicant-shell">
       <aside className="applicant-sidebar">
         <div className="brand-row">
-          <Link className="brand-name" to="/admin/dashboard"><span className="brand-mark">W</span>WEDRINGS</Link>
+          <span className="brand-name">WEDRINGS</span>
         </div>
         <nav className="sidebar-nav" aria-label="Admin navigation">
-          <Link className={`nav-item ${view === 'dashboard' ? 'active' : ''}`} to="/admin/dashboard"><span className="nav-icon" aria-hidden="true">⌂</span><span>Dashboard</span></Link>
-          <Link className={`nav-item ${view === 'verified' ? 'active' : ''}`} to="/admin/verified-records"><span className="nav-icon" aria-hidden="true">✓</span><span>Verified Records</span></Link>
-          <Link className={`nav-item ${view === 'all' ? 'active' : ''}`} to="/admin/all-applications"><span className="nav-icon" aria-hidden="true">▤</span><span>All Applications</span></Link>
-          <Link className={`nav-item ${view === 'new' ? 'active' : ''}`} to="/admin/new-submissions"><span className="nav-icon" aria-hidden="true">◫</span><span>New Submissions</span></Link>
-          <Link className={`nav-item ${view === 'appointments' ? 'active' : ''}`} to="/admin/appointments"><span className="nav-icon" aria-hidden="true">🗓</span><span>Appointments</span></Link>
+          <button type="button" className={`nav-item ${view === 'dashboard' ? 'active' : ''}`} onClick={() => navigate('/admin/dashboard')}><span className="nav-icon" aria-hidden="true">⌂</span><span>Dashboard</span></button>
+          <button type="button" className={`nav-item ${view === 'verified' ? 'active' : ''}`} onClick={() => navigate('/admin/verified-records')}><span className="nav-icon" aria-hidden="true">✓</span><span>Verified Records</span></button>
+          <button type="button" className={`nav-item ${view === 'all' ? 'active' : ''}`} onClick={() => navigate('/admin/all-applications')}><span className="nav-icon" aria-hidden="true">▤</span><span>All Applications</span></button>
+          <button type="button" className={`nav-item ${view === 'new' ? 'active' : ''}`} onClick={() => navigate('/admin/new-submissions')}><span className="nav-icon" aria-hidden="true">◫</span><span>New Submissions</span></button>
+          <button type="button" className={`nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => navigate('/admin/appointments')}><span className="nav-icon" aria-hidden="true">🗓</span><span>Appointments</span></button>
         </nav>
         <button className="logout-button" type="button" onClick={signOut}><span className="nav-icon" aria-hidden="true">⎋</span><span>Logout</span></button>
       </aside>
@@ -189,6 +190,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
 function ApplicationDetails({ application }) {
   const documents = Object.entries(application.documents || {})
+  const [isPrintFormOpen, setIsPrintFormOpen] = useState(false)
 
   return (
     <div className="admin-details-panel">
@@ -196,6 +198,8 @@ function ApplicationDetails({ application }) {
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Date:</strong> {application.appointmentDate || 'Not provided'}</p><p><strong>Time:</strong> {application.appointmentTime || 'Not provided'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
       <div className="admin-details-group"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <p key={key}><strong>{key}:</strong> {value}</p>) : <p>No documents listed.</p>}</div>
+      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => setIsPrintFormOpen(true)}>Print form</button></div>
+      {isPrintFormOpen && <div className="print-form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsPrintFormOpen(false) }}><section className="print-form-modal" role="dialog" aria-modal="true" aria-label="Printable application form"><div className="print-form-actions"><button type="button" className="admin-details-button" onClick={() => window.print()}>Print</button><button type="button" className="review-modal-close" aria-label="Close print form" onClick={() => setIsPrintFormOpen(false)}>×</button></div><OfficialApplicationForm application={application} /></section></div>}
     </div>
   )
 }

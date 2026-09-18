@@ -65,8 +65,11 @@ const applicationSchema = new mongoose.Schema({
   appointmentLocation: String,
   paymentMethod: String,
   paymentAmount: String,
+  applicationData: mongoose.Schema.Types.Mixed,
   documents: { type: Map, of: String },
   documentReviews: { type: Map, of: String },
+  documentReviewNotes: { type: Map, of: String },
+  notificationReads: { type: Map, of: Date },
   status: { type: String, default: 'For Review' },
 }, { timestamps: true });
 
@@ -219,7 +222,7 @@ app.put('/api/applications/appointments', async (req, res) => {
 
     const result = await Application.updateMany(
       {},
-      { $set: { appointmentDate, appointmentTime } },
+      { $set: { appointmentDate, appointmentTime }, $unset: { 'notificationReads.appointment': 1 } },
     );
     const applications = await Application.find({}).sort({ createdAt: -1 }).lean();
     res.json({ modifiedCount: result.modifiedCount, applications });
@@ -235,15 +238,34 @@ app.put('/api/applications/:id', async (req, res) => {
       Object.entries(req.body).filter(([key]) => !protectedFields.has(key)),
     );
 
-    const application = await Application.findByIdAndUpdate(
-      req.params.id,
-      { $set: editableFields },
-      { new: true, runValidators: true },
-    ).lean();
+    const existingApplication = await Application.findById(req.params.id).lean();
 
-    if (!application) {
+    if (!existingApplication) {
       return res.status(404).json({ message: 'Application not found.' });
     }
+
+    const replacedFlaggedDocuments = Object.keys(editableFields.documents || {}).filter((documentKey) => (
+      existingApplication.documents?.[documentKey] !== editableFields.documents[documentKey]
+      && existingApplication.documentReviews?.[documentKey] === 'Needs Redo'
+    ));
+
+    if (existingApplication.status === 'Rejected' || replacedFlaggedDocuments.length > 0) {
+      editableFields.status = 'For Review';
+    }
+
+    const update = { $set: editableFields };
+    if (replacedFlaggedDocuments.length > 0) {
+      update.$unset = Object.fromEntries(replacedFlaggedDocuments.flatMap((documentKey) => [
+        [`documentReviews.${documentKey}`, 1],
+        [`documentReviewNotes.${documentKey}`, 1],
+      ]));
+    }
+
+    const application = await Application.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true, runValidators: true },
+    ).lean();
 
     res.set('Cache-Control', 'no-store');
     res.json(application);
@@ -261,9 +283,12 @@ app.put('/api/applications/:id/status', async (req, res) => {
       return res.status(400).json({ message: 'Invalid application status.' });
     }
 
+    const statusUpdate = { $set: { status } };
+    if (status === 'Rejected') statusUpdate.$unset = { 'notificationReads.rejected': 1 };
+
     const application = await Application.findByIdAndUpdate(
       req.params.id,
-      { status },
+      statusUpdate,
       { new: true, runValidators: true },
     ).lean();
 
@@ -279,16 +304,34 @@ app.put('/api/applications/:id/status', async (req, res) => {
 
 app.put('/api/applications/:id/documents/:documentKey/review', async (req, res) => {
   try {
-    const { reviewStatus } = req.body;
+    const { reviewStatus, reviewNote } = req.body;
     const allowedStatuses = ['Accepted', 'Needs Redo'];
 
     if (!allowedStatuses.includes(reviewStatus)) {
       return res.status(400).json({ message: 'Invalid document review status.' });
     }
 
+    if (reviewStatus === 'Needs Redo' && !String(reviewNote || '').trim()) {
+      return res.status(400).json({ message: 'A redo instruction is required.' });
+    }
+
+    const update = {
+      $set: { [`documentReviews.${req.params.documentKey}`]: reviewStatus },
+    };
+
+    if (reviewStatus === 'Needs Redo') {
+      update.$set[`documentReviewNotes.${req.params.documentKey}`] = String(reviewNote).trim();
+      update.$unset = { [`notificationReads.redo-${req.params.documentKey}`]: 1 };
+    } else {
+      update.$unset = {
+        [`documentReviewNotes.${req.params.documentKey}`]: 1,
+        [`notificationReads.redo-${req.params.documentKey}`]: 1,
+      };
+    }
+
     const application = await Application.findByIdAndUpdate(
       req.params.id,
-      { $set: { [`documentReviews.${req.params.documentKey}`]: reviewStatus } },
+      update,
       { new: true, runValidators: true },
     ).lean();
 
@@ -316,7 +359,7 @@ app.put('/api/applications/:id/appointment', async (req, res) => {
 
     const application = await Application.findByIdAndUpdate(
       req.params.id,
-      { appointmentDate, appointmentTime },
+      { $set: { appointmentDate, appointmentTime }, $unset: { 'notificationReads.appointment': 1 } },
       { new: true, runValidators: true },
     ).lean();
 
@@ -327,6 +370,26 @@ app.put('/api/applications/:id/appointment', async (req, res) => {
     res.json(application);
   } catch (error) {
     res.status(400).json({ message: 'Unable to schedule appointment.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/notifications/:notificationKey/read', async (req, res) => {
+  try {
+    const { notificationKey } = req.params;
+    if (!/^(appointment|rejected|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+      return res.status(400).json({ message: 'Invalid notification.' });
+    }
+
+    const application = await Application.findByIdAndUpdate(
+      req.params.id,
+      { $set: { [`notificationReads.${notificationKey}`]: new Date() } },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+    res.json(application);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to mark notification as read.', error: error.message });
   }
 });
 
