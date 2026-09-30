@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth'
+import { apiFetch, useAuth } from '../auth'
 import './ApplicantDashboard.css'
-import OfficialApplicationForm from './OfficialApplicationForm'
+import { printExcelForm } from './printExcelForm'
 
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
@@ -43,7 +43,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   const [scheduleError, setScheduleError] = useState('')
 
   useEffect(() => {
-    fetch('/api/applications')
+    apiFetch('/api/applications')
       .then((response) => {
         if (!response.ok) throw new Error('Unable to load applications.')
         return response.json()
@@ -88,7 +88,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
     setScheduleError('')
     try {
       const isSchedulingAll = scheduleApplicantId === 'all'
-      const response = await fetch(isSchedulingAll ? '/api/applications/appointments' : `/api/applications/${scheduleApplicantId}/appointment`, {
+      const response = await apiFetch(isSchedulingAll ? '/api/applications/appointments' : `/api/applications/${scheduleApplicantId}/appointment`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentDate: scheduleDate, appointmentTime: scheduleTime }),
@@ -190,7 +190,6 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
 function ApplicationDetails({ application }) {
   const documents = Object.entries(application.documents || {})
-  const [isPrintFormOpen, setIsPrintFormOpen] = useState(false)
 
   return (
     <div className="admin-details-panel">
@@ -198,8 +197,7 @@ function ApplicationDetails({ application }) {
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Date:</strong> {application.appointmentDate || 'Not provided'}</p><p><strong>Time:</strong> {application.appointmentTime || 'Not provided'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
       <div className="admin-details-group"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <p key={key}><strong>{key}:</strong> {value}</p>) : <p>No documents listed.</p>}</div>
-      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => setIsPrintFormOpen(true)}>Print form</button></div>
-      {isPrintFormOpen && <div className="print-form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsPrintFormOpen(false) }}><section className="print-form-modal" role="dialog" aria-modal="true" aria-label="Printable application form"><div className="print-form-actions"><button type="button" className="admin-details-button" onClick={() => window.print()}>Print</button><button type="button" className="review-modal-close" aria-label="Close print form" onClick={() => setIsPrintFormOpen(false)}>×</button></div><OfficialApplicationForm application={application} /></section></div>}
+      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )
 }

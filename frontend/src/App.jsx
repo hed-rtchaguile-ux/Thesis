@@ -3,12 +3,14 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react
 import './App.css'
 import logoImage from './assets/log.png'
 import { AuthProvider } from './pages/AuthContext'
+import { apiFetch } from './pages/auth'
 import { useAuth } from './pages/auth'
 import AdminDashboard from './pages/Dashboard/AdminDashboard'
 import ApplicantDashboard from './pages/Dashboard/ApplicantDashboard'
 import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
 import ApplicantProfile from './pages/ApplicantProfile'
 import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
+import ApplicantSignup from './pages/Registration/ApplicantSignup'
 import LoginPage from './pages/login/LoginPage'
 import ProtectedRoute from './pages/ProtectedRoute'
 
@@ -16,16 +18,16 @@ function ApplicantLayout() {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [atlasStatus, setAtlasStatus] = useState('checking')
+  const [databaseStatus, setDatabaseStatus] = useState('checking')
 
   useEffect(() => {
-    fetch('/api/status')
+    apiFetch('/api/status')
       .then((response) => {
         if (!response.ok) throw new Error('Unable to check backend status')
         return response.json()
       })
-      .then(({ atlasConnected }) => setAtlasStatus(atlasConnected ? 'connected' : 'unavailable'))
-      .catch(() => setAtlasStatus('unavailable'))
+      .then(({ databaseConnected }) => setDatabaseStatus(databaseConnected ? 'connected' : 'unavailable'))
+      .catch(() => setDatabaseStatus('unavailable'))
   }, [])
 
   const sidebarItems = [
@@ -61,14 +63,14 @@ function ApplicantLayout() {
           })}
         </nav>
 
-        <div className={`atlas-status atlas-status-${atlasStatus}`} role="status">
+        <div className={`atlas-status atlas-status-${databaseStatus}`} role="status">
           <span className="atlas-status-dot" aria-hidden="true" />
           <span>
-            <strong>Atlas Database</strong>
+            <strong>MongoDB</strong>
             <small>
-              {atlasStatus === 'checking' && 'Checking connection...'}
-              {atlasStatus === 'connected' && 'Connected'}
-              {atlasStatus === 'unavailable' && 'Unavailable'}
+              {databaseStatus === 'checking' && 'Checking connection...'}
+              {databaseStatus === 'connected' && 'Connected'}
+              {databaseStatus === 'unavailable' && 'Unavailable'}
             </small>
           </span>
         </div>
@@ -88,6 +90,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<ApplicantSignup />} />
         <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
         <Route path="/admin/login" element={<Navigate to="/login" replace />} />
         <Route path="/superadmin/login" element={<Navigate to="/login" replace />} />

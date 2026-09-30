@@ -1,0 +1,72 @@
+.excel-print-sheet {
+  display: block;
+  width: 100%;
+  min-height: 600px;
+  background: #fff;
+}
+
+.excel-form-preview {
+  width: 100%;
+  overflow: visible;
+  background: #fff;
+}
+
+.excel-form-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+}
+
+.excel-form-table td {
+  box-sizing: border-box;
+  line-height: 1.1;
+  overflow: hidden;
+  overflow-wrap: normal;
+}
+
+.excel-form-table td.template-text {
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+}
+
+.excel-form-table td.center-prompt {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.excel-form-table td.form-value {
+  white-space: normal !important;
+  overflow-wrap: break-word;
+}
+
+.excel-form-loading,
+.excel-form-error {
+  margin: 16px 0;
+  color: #333;
+  font-size: 13px;
+}
+
+.excel-form-error {
+  color: #a32626;
+}
+
+@page {
+  size: legal portrait;
+  margin: 0.2in;
+}
+
+@media print {
+  .excel-print-sheet {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .excel-form-table {
+    width: 125% !important;
+    zoom: 0.8;
+    transform-origin: top left;
+    break-inside: avoid;
+  }
+}

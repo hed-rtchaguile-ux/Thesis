@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth'
+import { apiFetch, useAuth } from '../auth'
+import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
 
 function formatAppointmentDate(value, time = '') {
@@ -38,7 +39,7 @@ export default function ApplicantDashboard() {
 
   useEffect(() => {
     async function loadApplications() {
-      const response = await fetch(`/api/applications?applicantEmail=${encodeURIComponent(user.email)}`)
+      const response = await apiFetch('/api/applications')
       if (!response.ok) return
 
       const fetchedApplications = await response.json()
@@ -142,7 +143,7 @@ export default function ApplicantDashboard() {
   async function openNotification(notification) {
     openApplication(notification.application, notification.editing)
     try {
-      const response = await fetch(`/api/applications/${notification.application._id}/notifications/${notification.notificationKey}/read`, { method: 'PUT' })
+      const response = await apiFetch(`/api/applications/${notification.application._id}/notifications/${notification.notificationKey}/read`, { method: 'PUT' })
       if (!response.ok) throw new Error('Unable to mark notification as read.')
       const updatedApplication = await response.json()
       setApplications((currentApplications) => currentApplications.map((applicationRecord) => (
@@ -159,7 +160,7 @@ export default function ApplicantDashboard() {
     setEditError('')
 
     try {
-      const response = await fetch(`/api/applications/${selectedApplication._id}`, {
+      const response = await apiFetch(`/api/applications/${selectedApplication._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -377,12 +378,16 @@ export default function ApplicantDashboard() {
                   <div><h3>Bride information</h3><p><strong>Name:</strong> {selectedApplication.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {selectedApplication.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {selectedApplication.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {selectedApplication.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {selectedApplication.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {selectedApplication.brideEmail || 'Not provided'}</p></div>
                   <div><h3>Appointment</h3><p><strong>Date:</strong> {formatAppointmentDate(selectedApplication.appointmentDate)}</p><p><strong>Time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p><p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p><p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p></div>
                   <div className="applicant-document-review"><h3>Document review</h3>{Object.entries(selectedApplication.documents || {}).map(([key]) => { const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'; const reviewNote = selectedApplication.documentReviewNotes?.[key]; return <p key={key}><strong>{key}:</strong> <span className={reviewStatus === 'Needs Redo' ? 'document-status-redo' : ''}>{reviewStatus}</span>{reviewStatus === 'Needs Redo' && <small className="document-redo-note">{reviewNote || 'Please replace this document and save your changes.'}</small>}</p> })}</div>
-                  <button type="button" className="application-edit-button" onClick={() => setIsEditingApplication(true)}>Edit information</button>
+                  <div className="applicant-modal-actions">
+                    <button type="button" className="application-view-button" onClick={() => printExcelForm(selectedApplication._id)}>Print form</button>
+                    <button type="button" className="application-edit-button" onClick={() => setIsEditingApplication(true)}>Edit information</button>
+                  </div>
                 </div>
               )}
             </section>
           </div>
         )}
+
       </section>
   )
 }

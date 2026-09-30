@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { AuthContext, demoAccounts } from './auth'
+import { AuthContext } from './auth'
 
 function readStoredUser() {
   try {
+    if (!sessionStorage.getItem('wedrings-token')) {
+      sessionStorage.removeItem('wedrings-user')
+      return null
+    }
+
     return JSON.parse(sessionStorage.getItem('wedrings-user'))
   } catch {
     return null
@@ -12,28 +17,51 @@ function readStoredUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser)
 
-  function login(email, password) {
-    const normalizedEmail = email.trim().toLowerCase()
-    const role = Object.keys(demoAccounts).find((accountRole) => {
-      const account = demoAccounts[accountRole]
-      return account.email === normalizedEmail && account.password === password
-    })
+  async function login(email, password) {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const result = await response.json()
 
-    if (!role) {
-      return { success: false, message: 'The email or password is incorrect.' }
+      if (!response.ok) return { success: false, message: result.message || 'Unable to sign in.' }
+
+      sessionStorage.setItem('wedrings-token', result.token)
+      sessionStorage.setItem('wedrings-user', JSON.stringify(result.user))
+      setUser(result.user)
+      return { success: true, role: result.user.role }
+    } catch {
+      return { success: false, message: 'Unable to reach the sign-in service.' }
     }
+  }
 
-    const account = demoAccounts[role]
-    const signedInUser = { name: account.name, email: account.email, role }
-    sessionStorage.setItem('wedrings-user', JSON.stringify(signedInUser))
-    setUser(signedInUser)
-    return { success: true, role }
+  async function register(name, email, password) {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) return { success: false, message: result.message || 'Unable to create the account.' }
+
+      sessionStorage.setItem('wedrings-token', result.token)
+      sessionStorage.setItem('wedrings-user', JSON.stringify(result.user))
+      setUser(result.user)
+      return { success: true, role: result.user.role }
+    } catch {
+      return { success: false, message: 'Unable to reach the registration service.' }
+    }
   }
 
   function logout() {
+    sessionStorage.removeItem('wedrings-token')
     sessionStorage.removeItem('wedrings-user')
     setUser(null)
   }
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>
 }
