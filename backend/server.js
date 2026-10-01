@@ -28,6 +28,24 @@ const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI || 'mongodb://127.0.0
 const AUTH_TOKEN_SECRET = process.env.AUTH_TOKEN_SECRET || 'wedrings-local-development-secret';
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
 const scrypt = promisify(crypto.scrypt);
+const passwordResetRequestWindows = new Map();
+
+function isPasswordResetRateLimited(ipAddress) {
+  const now = Date.now();
+  for (const [address, window] of passwordResetRequestWindows) {
+    if (window.expiresAt <= now) passwordResetRequestWindows.delete(address);
+  }
+
+  const currentWindow = passwordResetRequestWindows.get(ipAddress);
+  if (!currentWindow) {
+    passwordResetRequestWindows.set(ipAddress, { count: 1, expiresAt: now + 15 * 60 * 1000 });
+    return false;
+  }
+  if (currentWindow.count >= 5) return true;
+
+  currentWindow.count += 1;
+  return false;
+}
 
 let dnsRecords;
 
@@ -51,6 +69,8 @@ const accountSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
+  passwordResetTokenHash: String,
+  passwordResetExpiresAt: Date,
   role: { type: String, required: true, enum: ['applicant', 'admin', 'superadmin'] },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -262,6 +282,110 @@ app.get('/api/status', (req, res) => {
   res.json({
     databaseConnected: mongoose.connection.readyState === 1,
   });
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
+  }
+
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  if (process.env.NODE_ENV === 'production' && !smtpConfigured) {
+    return res.status(503).json({ message: 'Password reset is temporarily unavailable. Please contact support.' });
+  }
+  if (isPasswordResetRateLimited(req.ip || req.socket.remoteAddress || 'unknown')) {
+    return res.status(429).json({ message: 'Too many reset requests. Please try again later.' });
+  }
+
+  try {
+    let account;
+    for (const role of ['applicant', 'admin', 'superadmin']) {
+      account = await accountModels[role].findOne({ email, isActive: true });
+      if (account) break;
+    }
+
+    const responseBody = {
+      message: 'If an account exists for that email, password reset instructions are available.',
+      developmentResetLinkLogged: !smtpConfigured && process.env.NODE_ENV !== 'production',
+    };
+
+    if (!account) return res.json(responseBody);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'http://localhost:5173' : req.get('origin') || 'http://localhost:5173');
+    const resetUrl = new URL('/reset-password', frontendUrl);
+    resetUrl.searchParams.set('token', token);
+
+    account.passwordResetTokenHash = tokenHash;
+    account.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await account.save();
+
+    if (smtpConfigured) {
+      const nodemailer = require('nodemailer');
+      const port = Number(process.env.SMTP_PORT || 587);
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port,
+        secure: process.env.SMTP_SECURE === 'true' || port === 465,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: account.email,
+        subject: 'Reset your WedRings password',
+        text: `Use this link to reset your password. It expires in 30 minutes: ${resetUrl.toString()}`,
+        html: `<p>Use the link below to reset your WedRings password. It expires in 30 minutes.</p><p><a href="${resetUrl.toString()}">Reset password</a></p>`,
+      });
+    } else {
+      console.info(`Development password reset link: ${resetUrl.toString()}`);
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json(responseBody);
+  } catch (error) {
+    console.error('Password reset request failed:', error.message);
+    res.status(500).json({ message: 'Unable to process the password reset request.' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const token = String(req.body.token || '');
+  const password = String(req.body.password || '');
+
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
+  }
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
+  }
+
+  try {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    let account;
+    for (const role of ['applicant', 'admin', 'superadmin']) {
+      account = await accountModels[role].findOne({
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { $gt: new Date() },
+        isActive: true,
+      });
+      if (account) break;
+    }
+
+    if (!account) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
+
+    account.passwordHash = await hashPassword(password);
+    account.passwordResetTokenHash = undefined;
+    account.passwordResetExpiresAt = undefined;
+    await account.save();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ message: 'Your password has been reset. You can now log in.' });
+  } catch (error) {
+    console.error('Password reset failed:', error.message);
+    res.status(500).json({ message: 'Unable to reset the password.' });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {

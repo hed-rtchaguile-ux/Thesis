@@ -227,6 +227,17 @@
   font-size: 12px;
 }
 
+.recovery-note {
+  margin: 16px 0 0;
+  padding: 12px;
+  border: 1px solid rgba(73, 93, 76, 0.2);
+  border-radius: 6px;
+  background: rgba(239, 238, 232, 0.8);
+  color: #495d4c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .signup-link {
   margin-top: 18px;
   color: var(--muted);

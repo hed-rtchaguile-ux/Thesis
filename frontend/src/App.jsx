@@ -11,14 +11,23 @@ import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
 import ApplicantProfile from './pages/ApplicantProfile'
 import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
 import ApplicantSignup from './pages/Registration/ApplicantSignup'
+import PasswordRecoveryPage from './pages/login/PasswordRecoveryPage'
 import LoginPage from './pages/login/LoginPage'
 import ProtectedRoute from './pages/ProtectedRoute'
 
 function ApplicantLayout() {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [databaseStatus, setDatabaseStatus] = useState('checking')
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const displayName = user?.name || 'User'
+  const initials = displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   useEffect(() => {
     apiFetch('/api/status')
@@ -39,10 +48,35 @@ function ApplicantLayout() {
     <div className="app-shell">
       <aside className="app-sidebar">
         <div className="brand-row">
-          <span className="brand-mark" aria-label="WedRings logo">
-            <img src={logoImage} alt="WedRings logo" className="brand-logo" />
-          </span>
-          <span className="brand-name">WEDRINGS</span>
+          <div className="app-brand-lockup">
+            <span className="brand-mark" aria-label="WedRings logo">
+              <img src={logoImage} alt="WedRings logo" className="brand-logo" />
+            </span>
+            <span className="brand-name">WEDRINGS</span>
+          </div>
+          <div className="applicant-header-account">
+            <button
+              type="button"
+              className="applicant-header-account-trigger"
+              aria-label="Open account menu"
+              aria-haspopup="menu"
+              aria-expanded={accountMenuOpen}
+              onClick={() => setAccountMenuOpen((isOpen) => !isOpen)}
+            >
+              <span className="applicant-header-avatar">{initials}</span>
+              <span>{displayName}</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            {accountMenuOpen && (
+              <div className="applicant-header-account-menu" role="menu" aria-label="Account actions">
+                <button type="button" role="menuitem" onClick={() => {
+                  setAccountMenuOpen(false)
+                  navigate('/applicant/profile')
+                }}>Profile</button>
+                <button type="button" role="menuitem" onClick={handleLogout}>Logout</button>
+              </div>
+            )}
+            </div>
         </div>
 
         <nav className="sidebar-nav" aria-label="Applicant navigation">
@@ -90,6 +124,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<PasswordRecoveryPage mode="request" />} />
+        <Route path="/reset-password" element={<PasswordRecoveryPage mode="reset" />} />
         <Route path="/register" element={<ApplicantSignup />} />
         <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
         <Route path="/admin/login" element={<Navigate to="/login" replace />} />

@@ -70,7 +70,7 @@ export default function LoginPage() {
                 <input type="checkbox" />
                 <span>Remember me</span>
               </label>
-              <a href="#" className="text-link">Forgot password?</a>
+              <Link to="/forgot-password" className="text-link">Forgot password?</Link>
             </div>
 
             {error && <p className="form-error" role="alert">{error}</p>}

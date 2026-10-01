@@ -280,6 +280,28 @@
   position: relative;
 }
 
+.admin-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-account-trigger:focus-visible {
+  outline: 2px solid #6078ad;
+  outline-offset: 4px;
+}
+
+.admin-user-caret {
+  color: #586785;
+  font-size: 12px;
+}
+
 .user-dropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -605,6 +627,35 @@
   border-radius: 14px;
   background: #f7f8fc;
   box-shadow: 0 24px 60px rgba(28, 36, 61, 0.24);
+}
+
+.admin-profile-modal {
+  width: min(100%, 460px);
+}
+
+.admin-profile-details {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-profile-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.admin-profile-row span {
+  color: #697795;
+}
+
+.admin-profile-row strong {
+  overflow-wrap: anywhere;
+  color: #2d3550;
 }
 
 .applicant-modal-header,

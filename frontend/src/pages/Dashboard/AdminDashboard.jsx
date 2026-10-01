@@ -34,6 +34,8 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   const [loadError, setLoadError] = useState('')
   const [updatingId, setUpdatingId] = useState('')
   const [showAllApplications, setShowAllApplications] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [selectedAppointmentDate, setSelectedAppointmentDate] = useState('')
@@ -121,13 +123,39 @@ export default function AdminDashboard({ view = 'dashboard' }) {
           <button type="button" className={`nav-item ${view === 'new' ? 'active' : ''}`} onClick={() => navigate('/admin/new-submissions')}><span className="nav-icon" aria-hidden="true">◫</span><span>New Submissions</span></button>
           <button type="button" className={`nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => navigate('/admin/appointments')}><span className="nav-icon" aria-hidden="true">🗓</span><span>Appointments</span></button>
         </nav>
-        <button className="logout-button" type="button" onClick={signOut}><span className="nav-icon" aria-hidden="true">⎋</span><span>Logout</span></button>
       </aside>
 
       <section className="applicant-main" id="admin-dashboard-top">
         <header className="topbar">
           <div className="topbar-main"><h1>Welcome, Administrator!</h1><p>{pageDescription}</p></div>
-          <div className="topbar-user"><div className="user-avatar">PA</div><span>{user.name}</span><span className="admin-user-caret" aria-hidden="true">▾</span></div>
+          <div className="topbar-user">
+            <div className="user-menu-wrapper">
+              <button
+                type="button"
+                className="admin-account-trigger"
+                aria-label="Open administrator menu"
+                aria-expanded={accountMenuOpen}
+                onClick={() => setAccountMenuOpen((isOpen) => !isOpen)}
+              >
+                <span className="user-avatar">PA</span>
+                <span>{user?.name || 'Portal Administrator'}</span>
+                <span className="admin-user-caret" aria-hidden="true">▾</span>
+              </button>
+              {accountMenuOpen && (
+                <div className="user-dropdown" role="menu" aria-label="Administrator actions">
+                  <button type="button" className="dropdown-item" role="menuitem" onClick={() => {
+                    setAccountMenuOpen(false)
+                    setProfileOpen(true)
+                  }}>
+                    Profile
+                  </button>
+                  <button type="button" className="dropdown-item danger" role="menuitem" onClick={signOut}>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </header>
 
         <div className="dashboard-panel admin-dashboard-panel">
@@ -183,6 +211,24 @@ export default function AdminDashboard({ view = 'dashboard' }) {
             })}
           </section>
         </div>
+
+        {profileOpen && (
+          <div className="applicant-modal-backdrop" role="presentation" onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setProfileOpen(false)
+          }}>
+            <section className="applicant-modal admin-profile-modal" role="dialog" aria-modal="true" aria-labelledby="admin-profile-title">
+              <div className="applicant-modal-header">
+                <div><span className="application-label">Administrator account</span><h2 id="admin-profile-title">Profile</h2></div>
+                <button type="button" className="applicant-modal-close" onClick={() => setProfileOpen(false)} aria-label="Close profile">×</button>
+              </div>
+              <div className="admin-profile-details">
+                <div className="admin-profile-row"><span>Name</span><strong>{user?.name || 'Portal Administrator'}</strong></div>
+                <div className="admin-profile-row"><span>Email</span><strong>{user?.email || 'Not available'}</strong></div>
+                <div className="admin-profile-row"><span>Role</span><strong>{user?.role || 'Administrator'}</strong></div>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     </main>
   )

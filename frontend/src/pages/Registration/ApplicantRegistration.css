@@ -132,6 +132,65 @@
   font-weight: 600;
 }
 
+.registration-account-menu {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.registration-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 8px;
+  border: 0;
+  background: transparent;
+  color: #2d3245;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.registration-account-trigger:focus-visible {
+  outline: 2px solid #5167a4;
+  outline-offset: 3px;
+}
+
+.registration-account-dropdown {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid rgba(94, 106, 143, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(27, 34, 57, 0.12);
+}
+
+.registration-account-dropdown button {
+  padding: 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #2e3853;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.registration-account-dropdown button:hover {
+  background: #f2f5ff;
+}
+
+.registration-account-dropdown button:last-child {
+  color: #7e1d1d;
+}
+
 .user-avatar {
   display: grid;
   place-items: center;
@@ -258,6 +317,12 @@
   font-weight: 700;
 }
 
+.field-group label.family-section-label {
+  color: #2d3245;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 .field-group input,
 .field-group select {
   width: 100%;
@@ -291,6 +356,53 @@
 .field-group input[aria-invalid='true'],
 .field-group select[aria-invalid='true'] {
   border-color: #b14d4d;
+}
+
+.yes-no-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 320px;
+}
+
+.field-group .yes-no-option {
+  position: relative;
+  display: block;
+  margin: 0;
+  cursor: pointer;
+}
+
+.yes-no-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  opacity: 0;
+}
+
+.yes-no-option span {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid rgba(120, 129, 158, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  color: #4a536c;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.yes-no-option.selected span {
+  border-color: #5167a4;
+  background: #eef3ff;
+  color: #3e4c78;
+}
+
+.yes-no-option:focus-within span {
+  outline: 2px solid rgba(116, 137, 196, 0.3);
+  outline-offset: 2px;
 }
 
 .input-with-icon {
@@ -896,6 +1008,10 @@
     padding: 18px 16px 24px;
   }
 
+  .registration-account-menu {
+    display: none;
+  }
+
   .two-box-layout,
   .two-col,
   .three-col,
@@ -908,22 +1024,59 @@
 
   .stepper {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
   }
 }
 
 @media (max-width: 680px) {
   .registration-header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
   }
 
   .registration-header h1 {
-    font-size: 24px;
+    min-width: 0;
+    font-size: 22px;
   }
 
   .stepper {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 3px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .step-item {
+    min-width: 0;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+    font-size: 9px;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  .step-number {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    font-size: 10px;
+  }
+
+  .step-label {
+    overflow-wrap: anywhere;
+  }
+
+  .registration-account-trigger {
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .registration-account-trigger .user-avatar {
+    width: 26px;
+    height: 26px;
   }
 
   .form-actions {
