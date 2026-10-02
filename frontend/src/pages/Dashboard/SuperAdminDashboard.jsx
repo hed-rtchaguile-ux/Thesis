@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { NoticeManager, ReportCards } from './AdminTools'
 import { filterApplications, sortAppointments } from './applicationSearch'
+import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
-import OfficialApplicationForm from './OfficialApplicationForm'
 
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
@@ -266,7 +266,6 @@ export default function SuperAdminDashboard() {
 }
 
 function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview }) {
-  const [isPrintFormOpen, setIsPrintFormOpen] = useState(false)
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
@@ -312,8 +311,7 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
         </div>
         {imageDocuments.length > 0 && <div className="admin-other-documents"><h5>Other document images</h5>{imageDocuments.filter(([key]) => key !== 'psaMarriageLicense').map(([key, value]) => <img key={key} src={value} alt={`Submitted ${key}`} />)}</div>}
       </div>
-      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => setIsPrintFormOpen(true)}>Print form</button></div>
-      {isPrintFormOpen && <div className="print-form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsPrintFormOpen(false) }}><section className="print-form-modal" role="dialog" aria-modal="true" aria-label="Printable application form"><div className="print-form-actions"><button type="button" className="admin-details-button" onClick={() => window.print()}>Print</button><button type="button" className="review-modal-close" aria-label="Close print form" onClick={() => setIsPrintFormOpen(false)}>×</button></div><OfficialApplicationForm application={application} /></section></div>}
+      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )
 }

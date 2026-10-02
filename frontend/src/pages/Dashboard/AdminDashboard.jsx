@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { NoticeManager, ReportCards } from './AdminTools'
 import { filterApplications, sortAppointments } from './applicationSearch'
+import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
-import OfficialApplicationForm from './OfficialApplicationForm'
 
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
@@ -169,7 +169,6 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
 function ApplicationDetails({ application }) {
   const documents = Object.entries(application.documents || {})
-  const [isPrintFormOpen, setIsPrintFormOpen] = useState(false)
 
   return (
     <div className="admin-details-panel">
@@ -178,8 +177,7 @@ function ApplicationDetails({ application }) {
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Date:</strong> {application.appointmentDate || 'Not provided'}</p><p><strong>Time:</strong> {application.appointmentTime || 'Not provided'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
       <div className="admin-details-group"><h4>Marriage license</h4><p><strong>Number:</strong> {application.marriageLicenseNumber || 'Not issued'}</p><p><strong>Issued:</strong> {application.marriageLicenseIssuedAt ? new Date(application.marriageLicenseIssuedAt).toLocaleDateString() : 'Not issued'}</p></div>
       <div className="admin-details-group"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <p key={key}><strong>{key}:</strong> {value}</p>) : <p>No documents listed.</p>}</div>
-      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => setIsPrintFormOpen(true)}>Print form</button></div>
-      {isPrintFormOpen && <div className="print-form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsPrintFormOpen(false) }}><section className="print-form-modal" role="dialog" aria-modal="true" aria-label="Printable application form"><div className="print-form-actions"><button type="button" className="admin-details-button" onClick={() => window.print()}>Print</button><button type="button" className="review-modal-close" aria-label="Close print form" onClick={() => setIsPrintFormOpen(false)}>×</button></div><OfficialApplicationForm application={application} /></section></div>}
+      <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )
 }
