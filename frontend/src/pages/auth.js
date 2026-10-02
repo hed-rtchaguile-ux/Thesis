@@ -23,3 +23,11 @@ export const demoAccounts = {
     name: 'Super Administrator',
   },
 }
+
+export function apiFetch(resource, options = {}) {
+  const headers = new Headers(options.headers)
+  const token = sessionStorage.getItem('wedrings-token')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  return fetch(resource, { ...options, headers })
+}
