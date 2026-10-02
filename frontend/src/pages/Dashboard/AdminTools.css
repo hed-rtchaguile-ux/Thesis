@@ -1,0 +1,229 @@
+.admin-reports,
+.notice-editor,
+.notice-list {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-tools-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.admin-tools-heading h2 {
+  margin: 3px 0 0;
+  color: #2f3751;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.admin-tools-heading > span {
+  color: #697795;
+  font-size: 12px;
+}
+
+.admin-report-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-report-grid article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-left: 3px solid #4b806e;
+  background: #f4f7f4;
+}
+
+.admin-report-grid article > span {
+  color: #53645d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-report-grid strong {
+  grid-row: span 2;
+  color: #263f35;
+  font-size: 27px;
+  line-height: 1;
+}
+
+.admin-report-grid small {
+  color: #748078;
+  font-size: 11px;
+}
+
+.admin-applicant-search {
+  width: min(100%, 340px);
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 11px;
+  border: 1px solid rgba(125, 136, 168, 0.3);
+  border-radius: 5px;
+  color: #27332e;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.notice-manager {
+  display: grid;
+  gap: 2px;
+}
+
+.notice-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.notice-form label {
+  display: grid;
+  gap: 6px;
+  color: #53645d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notice-form input,
+.notice-form textarea {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #d6ddd8;
+  border-radius: 5px;
+  color: #27332e;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.notice-form input[type='file'] {
+  padding: 7px;
+}
+
+.notice-photo-field,
+.notice-message-field {
+  grid-column: 1 / -1;
+}
+
+.notice-form textarea {
+  resize: vertical;
+}
+
+.notice-form button {
+  justify-self: start;
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 5px;
+  color: #fff;
+  background: #315d4d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notice-form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.notice-feedback {
+  margin-top: 12px;
+  color: #315d4d;
+  font-size: 13px;
+}
+
+.notice-feedback.notice-error {
+  color: #a33d42;
+}
+
+.notice-empty {
+  padding: 14px 0;
+  color: #697795;
+  font-size: 13px;
+}
+
+.notice-list-item {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid #e8ece9;
+}
+
+.notice-list-item img {
+  width: 84px;
+  height: 72px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.notice-list-item h3 {
+  margin: 0 0 4px;
+  color: #263f35;
+  font-size: 14px;
+}
+
+.notice-list-item p,
+.notice-list-item small {
+  display: block;
+  margin-top: 3px;
+  color: #697795;
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .admin-reports,
+  .notice-editor,
+  .notice-list {
+    padding: 16px;
+  }
+
+  .admin-tools-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notice-form {
+    grid-template-columns: 1fr;
+  }
+
+  .notice-photo-field,
+  .notice-message-field {
+    grid-column: auto;
+  }
+
+  .notice-list-item {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .notice-list-item img {
+    width: 64px;
+    height: 64px;
+  }
+
+  .notice-list-item > button {
+    grid-column: 2;
+    justify-self: start;
+    margin: 0;
+  }
+}

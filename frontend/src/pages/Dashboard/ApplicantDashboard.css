@@ -980,6 +980,18 @@
   background: #f9f0f5;
 }
 
+.license-issued-label {
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid #b9d1c2;
+  border-radius: 5px;
+  color: #315d4d;
+  background: #edf5ef;
+  font-size: 11px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .admin-verify-button:disabled,
 .admin-reject-button:disabled {
   cursor: not-allowed;
@@ -1048,6 +1060,18 @@
 .admin-appointment-panel-heading > span {
   color: #697795;
   font-size: 12px;
+}
+
+.admin-schedule-readonly-note {
+  color: #697795;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-schedule-date {
+  color: #315d4d;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .admin-appointment-controls {

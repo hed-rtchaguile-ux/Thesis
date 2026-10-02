@@ -71,9 +71,21 @@ const applicationSchema = new mongoose.Schema({
   documentReviewNotes: { type: Map, of: String },
   notificationReads: { type: Map, of: Date },
   status: { type: String, default: 'For Review' },
+  marriageLicenseNumber: String,
+  marriageLicenseIssuedAt: Date,
 }, { timestamps: true });
 
 const Application = mongoose.model('Application', applicationSchema, 'info_wedrings');
+const noticeSchema = new mongoose.Schema({
+  groomFullName: { type: String, required: true },
+  brideFullName: { type: String, required: true },
+  ceremonyDate: { type: String, required: true },
+  message: String,
+  imageData: { type: String, required: true },
+  publishedAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, required: true },
+}, { timestamps: true });
+const MarriageNotice = mongoose.model('MarriageNotice', noticeSchema, 'marriage_notices');
 
 // Applying the CORS options const
 const corsOptions = {
@@ -84,13 +96,61 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json()); // Parses incoming JSON data
+app.use(express.json({ limit: '12mb' })); // Allows compressed couple photos in notice posts
 
 app.get('/api/status', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({
     atlasConnected: mongoose.connection.readyState === 1,
   });
+});
+
+app.get('/api/notices', async (req, res) => {
+  try {
+    const notices = await MarriageNotice.find({ expiresAt: { $gt: new Date() } })
+      .sort({ publishedAt: -1 })
+      .lean();
+    res.set('Cache-Control', 'no-store');
+    res.json(notices);
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load marriage notices.', error: error.message });
+  }
+});
+
+app.post('/api/notices', async (req, res) => {
+  try {
+    const { groomFullName, brideFullName, ceremonyDate, message = '', imageData } = req.body;
+    if (!String(groomFullName || '').trim() || !String(brideFullName || '').trim() || !/^\d{4}-\d{2}-\d{2}$/.test(ceremonyDate || '')) {
+      return res.status(400).json({ message: 'Couple names and a ceremony date are required.' });
+    }
+    if (typeof imageData !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(imageData) || imageData.length > 10_000_000) {
+      return res.status(400).json({ message: 'Upload a JPEG, PNG, or WebP image under 7 MB.' });
+    }
+
+    const publishedAt = new Date();
+    const notice = await MarriageNotice.create({
+      groomFullName: String(groomFullName).trim(),
+      brideFullName: String(brideFullName).trim(),
+      ceremonyDate,
+      message: String(message).trim().slice(0, 500),
+      imageData,
+      publishedAt,
+      expiresAt: new Date(publishedAt.getTime() + 10 * 24 * 60 * 60 * 1000),
+    });
+    res.status(201).json(notice);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to publish marriage notice.', error: error.message });
+  }
+});
+
+app.delete('/api/notices/:id', async (req, res) => {
+  try {
+    const notice = await MarriageNotice.findByIdAndDelete(req.params.id);
+    if (!notice) return res.status(404).json({ message: 'Marriage notice not found.' });
+    res.status(204).end();
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to remove marriage notice.', error: error.message });
+  }
 });
 
 const dnsServer = dns.createUDPServer((request, send) => {
@@ -212,27 +272,12 @@ app.get('/api/applications/:id', async (req, res) => {
   }
 });
 
-app.put('/api/applications/appointments', async (req, res) => {
-  try {
-    const { appointmentDate, appointmentTime } = req.body;
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate || '') || !appointmentTime) {
-      return res.status(400).json({ message: 'Appointment date and time are required.' });
-    }
-
-    const result = await Application.updateMany(
-      {},
-      { $set: { appointmentDate, appointmentTime }, $unset: { 'notificationReads.appointment': 1 } },
-    );
-    const applications = await Application.find({}).sort({ createdAt: -1 }).lean();
-    res.json({ modifiedCount: result.modifiedCount, applications });
-  } catch (error) {
-    res.status(400).json({ message: 'Unable to schedule all applicants.', error: error.message });
-  }
-});
-
 app.put('/api/applications/:id', async (req, res) => {
   try {
+    if (req.params.id === 'appointments') {
+      return res.status(404).json({ message: 'Appointment scheduling is disabled.' });
+    }
+
     const protectedFields = new Set(['_id', 'status', 'appointmentDate', 'appointmentTime', 'appointmentLocation', 'applicantEmail', 'createdAt', 'updatedAt']);
     const editableFields = Object.fromEntries(
       Object.entries(req.body).filter(([key]) => !protectedFields.has(key)),
@@ -302,6 +347,31 @@ app.put('/api/applications/:id/status', async (req, res) => {
   }
 });
 
+app.put('/api/applications/:id/license', async (req, res) => {
+  try {
+    const licenseNumber = String(req.body.licenseNumber || '').trim();
+    if (!licenseNumber || licenseNumber.length > 80) {
+      return res.status(400).json({ message: 'Enter a marriage license number up to 80 characters.' });
+    }
+
+    const application = await Application.findById(req.params.id);
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+    if (application.status !== 'Verified') {
+      return res.status(409).json({ message: 'Only verified applications can be issued a marriage license.' });
+    }
+    if (application.marriageLicenseIssuedAt) {
+      return res.status(409).json({ message: 'A marriage license has already been issued for this application.' });
+    }
+
+    application.marriageLicenseNumber = licenseNumber;
+    application.marriageLicenseIssuedAt = new Date();
+    await application.save();
+    res.json(application.toObject());
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to issue marriage license.', error: error.message });
+  }
+});
+
 app.put('/api/applications/:id/documents/:documentKey/review', async (req, res) => {
   try {
     const { reviewStatus, reviewNote } = req.body;
@@ -342,34 +412,6 @@ app.put('/api/applications/:id/documents/:documentKey/review', async (req, res) 
     res.json(application);
   } catch (error) {
     res.status(400).json({ message: 'Unable to update document review.', error: error.message });
-  }
-});
-
-app.put('/api/applications/:id/appointment', async (req, res) => {
-  try {
-    const { appointmentDate, appointmentTime } = req.body;
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate || '')) {
-      return res.status(400).json({ message: 'Appointment date must use YYYY-MM-DD format.' });
-    }
-
-    if (!appointmentTime || typeof appointmentTime !== 'string') {
-      return res.status(400).json({ message: 'Appointment time is required.' });
-    }
-
-    const application = await Application.findByIdAndUpdate(
-      req.params.id,
-      { $set: { appointmentDate, appointmentTime }, $unset: { 'notificationReads.appointment': 1 } },
-      { new: true, runValidators: true },
-    ).lean();
-
-    if (!application) {
-      return res.status(404).json({ message: 'Application not found.' });
-    }
-
-    res.json(application);
-  } catch (error) {
-    res.status(400).json({ message: 'Unable to schedule appointment.', error: error.message });
   }
 });
 

@@ -10,6 +10,7 @@ import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
 import ApplicantProfile from './pages/ApplicantProfile'
 import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
 import LoginPage from './pages/login/LoginPage'
+import PublicNotices from './pages/PublicNotices'
 import ProtectedRoute from './pages/ProtectedRoute'
 
 function ApplicantLayout() {
@@ -86,7 +87,7 @@ function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<PublicNotices />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
         <Route path="/admin/login" element={<Navigate to="/login" replace />} />
@@ -104,13 +105,17 @@ function App() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/verified-records" element={<AdminDashboard view="verified" />} />
           <Route path="/admin/all-applications" element={<AdminDashboard view="all" />} />
-          <Route path="/admin/new-submissions" element={<AdminDashboard view="new" />} />
+          <Route path="/admin/new-submissions" element={<Navigate to="/admin/all-applications" replace />} />
           <Route path="/admin/appointments" element={<AdminDashboard view="appointments" />} />
+          <Route path="/admin/reports" element={<AdminDashboard view="reports" />} />
+          <Route path="/admin/notices" element={<AdminDashboard view="notices" />} />
         </Route>
 
         <Route element={<ProtectedRoute role="superadmin" />}>
           <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
           <Route path="/superadmin/appointments" element={<SuperAdminDashboard />} />
+          <Route path="/superadmin/reports" element={<SuperAdminDashboard />} />
+          <Route path="/superadmin/notices" element={<SuperAdminDashboard />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />
