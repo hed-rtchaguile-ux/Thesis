@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const dns = require('dns2');
 const systemDns = require('node:dns');
-const { buildPrintFormPdf } = require('./printForm');
+const { buildPrintFormHtml } = require('./printForm');
 
 // Load environmental variables
 dotenv.config();
@@ -281,10 +281,9 @@ app.get('/api/applications/:id/print', async (req, res) => {
       return res.status(404).json({ message: 'Application not found.' });
     }
 
-    const printForm = await buildPrintFormPdf(application);
+    const printForm = await buildPrintFormHtml(application);
     res.set('Cache-Control', 'no-store');
-    res.set('Content-Disposition', 'inline; filename="marriage-license-application.pdf"');
-    res.type('application/pdf').send(printForm);
+    res.type('html').send(printForm);
   } catch (error) {
     console.error('Application print form error:', error.message);
     res.status(500).json({ message: 'Unable to prepare the application print form.' });

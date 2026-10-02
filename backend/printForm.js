@@ -1,16 +1,10 @@
 const path = require('node:path');
-const os = require('node:os');
-const fs = require('node:fs/promises');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
 const ExcelJS = require('exceljs');
 
 const FORM_ROWS = 98;
 const FORM_COLUMNS = 33;
 const TEMPLATE_PATH = path.join(__dirname, '..', 'frontend', 'public', 'marriage-license-template.xlsx');
-const EXCEL_EXPORT_SCRIPT = path.join(__dirname, 'exportPrintPdf.ps1');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const execFileAsync = promisify(execFile);
 
 function join(values, separator = ', ') {
   return values.filter(Boolean).join(separator);
@@ -146,43 +140,6 @@ function fillPerson(sheet, application, person, side) {
 function fillTemplate(sheet, application) {
   fillPerson(sheet, application, 'groom', 'groom');
   fillPerson(sheet, application, 'bride', 'bride');
-}
-
-async function buildPrintFormPdf(application) {
-  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'wedrings-print-'));
-  const workbookPath = path.join(tempDirectory, 'application.xlsx');
-  const pdfPath = path.join(tempDirectory, 'application.pdf');
-
-  try {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(TEMPLATE_PATH);
-  const sheet = workbook.getWorksheet('Front');
-  if (!sheet) throw new Error('The workbook does not contain its Front form sheet.');
-
-  sheet.getCell('P28').value = null;
-  sheet.pageSetup.fitToPage = true;
-  sheet.pageSetup.fitToWidth = 1;
-  sheet.pageSetup.fitToHeight = 1;
-  sheet.pageSetup.scale = undefined;
-  sheet.pageSetup.orientation = 'portrait';
-
-  fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
-  await workbook.xlsx.writeFile(workbookPath);
-  await execFileAsync('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    EXCEL_EXPORT_SCRIPT,
-    workbookPath,
-    pdfPath,
-  ], { timeout: 30000 });
-
-  return await fs.readFile(pdfPath);
-  } finally {
-    await fs.rm(tempDirectory, { recursive: true, force: true });
-  }
 }
 
 function escapeHtml(value) {
@@ -332,7 +289,53 @@ async function buildPrintFormHtml(application) {
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
   }
 
-  return `<table class="excel-form-table" aria-label="Completed Application for Marriage License"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Application for Marriage License</title>
+  <style>
+    @page { size: 8.5in 13in; margin: 0.25in; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { color: #111; font-family: Arial, sans-serif; }
+    .form-page {
+      position: relative;
+      width: 8in;
+      height: 12.5in;
+      overflow: hidden;
+      margin: 0 auto;
+      background: #fff;
+    }
+    .excel-form-table {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 11.111111in;
+      height: 16.677083in;
+      border-collapse: collapse;
+      table-layout: fixed;
+      transform: scale(0.72);
+      transform-origin: top left;
+    }
+    .excel-form-table td { box-sizing: border-box; }
+    @media screen {
+      body { padding: 24px; background: #e9e9e9; }
+      .form-page { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
+    }
+    @media print {
+      html, body { width: 8in; height: 12.5in; }
+      .form-page { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="form-page">
+    <table class="excel-form-table" aria-label="Completed Application for Marriage License"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>
+  </main>
+</body>
+</html>`;
 }
 
-module.exports = { buildPrintFormHtml, buildPrintFormPdf };
+module.exports = { buildPrintFormHtml };
