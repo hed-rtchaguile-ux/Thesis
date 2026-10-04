@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const dns = require('dns2');
 const systemDns = require('node:dns');
+const crypto = require('node:crypto');
+const { promisify } = require('node:util');
 const { buildPrintFormHtml } = require('./printForm');
 
 // Load environmental variables
@@ -23,6 +25,9 @@ const DNS_PORT = Number(process.env.DNS_PORT || 5353);
 const DNS_HOST = process.env.DNS_HOST || '127.0.0.1';
 const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI;
+const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'));
+const scrypt = promisify(crypto.scrypt);
+const passwordResetRequestWindows = new Map();
 
 let dnsRecords;
 
@@ -72,21 +77,18 @@ const applicationSchema = new mongoose.Schema({
   documentReviewNotes: { type: Map, of: String },
   notificationReads: { type: Map, of: Date },
   status: { type: String, default: 'For Review' },
-  marriageLicenseNumber: String,
-  marriageLicenseIssuedAt: Date,
+  licenseReleaseDate: String,
 }, { timestamps: true });
 
 const Application = mongoose.model('Application', applicationSchema, 'info_wedrings');
-const noticeSchema = new mongoose.Schema({
-  groomFullName: { type: String, required: true },
-  brideFullName: { type: String, required: true },
-  ceremonyDate: { type: String, required: true },
-  message: String,
-  imageData: { type: String, required: true },
-  publishedAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, required: true },
+const applicantAccountSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  email: { type: String, required: true, lowercase: true, trim: true, unique: true },
+  passwordHash: { type: String, required: true },
+  passwordResetTokenHash: String,
+  passwordResetExpiresAt: Date,
 }, { timestamps: true });
-const MarriageNotice = mongoose.model('MarriageNotice', noticeSchema, 'marriage_notices');
+const ApplicantAccount = mongoose.model('ApplicantAccount', applicantAccountSchema, 'applicant_accounts');
 
 // Applying the CORS options const
 const corsOptions = {
@@ -97,7 +99,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '12mb' })); // Allows compressed couple photos in notice posts
+app.use(express.json({ limit: '12mb' }));
 
 app.get('/api/status', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -106,51 +108,163 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-app.get('/api/notices', async (req, res) => {
+function isPasswordResetRateLimited(ipAddress) {
+  const now = Date.now();
+  for (const [address, window] of passwordResetRequestWindows) {
+    if (window.expiresAt <= now) passwordResetRequestWindows.delete(address);
+  }
+
+  const currentWindow = passwordResetRequestWindows.get(ipAddress);
+  if (!currentWindow) {
+    passwordResetRequestWindows.set(ipAddress, { count: 1, expiresAt: now + 15 * 60 * 1000 });
+    return false;
+  }
+  if (currentWindow.count >= 5) return true;
+  currentWindow.count += 1;
+  return false;
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = await scrypt(password, salt, 64);
+  return `${salt}:${derivedKey.toString('hex')}`;
+}
+
+async function verifyPassword(password, storedHash) {
+  const [salt, expectedHex] = String(storedHash || '').split(':');
+  if (!salt || !expectedHex) return false;
+  const expected = Buffer.from(expectedHex, 'hex');
+  const actual = await scrypt(password, salt, expected.length);
+  return expected.length > 0 && crypto.timingSafeEqual(actual, expected);
+}
+
+app.post('/api/auth/register', async (req, res) => {
   try {
-    const notices = await MarriageNotice.find({ expiresAt: { $gt: new Date() } })
-      .sort({ publishedAt: -1 })
-      .lean();
+    const name = String(req.body.name || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (name.length < 2 || name.length > 100) {
+      return res.status(400).json({ message: 'Enter a name between 2 and 100 characters.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+    }
+    if (['admin@wedrings.test', 'superadmin@wedrings.test'].includes(email)) {
+      return res.status(409).json({ message: 'An account with this email already exists.' });
+    }
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
+    }
+
+    const applicant = await ApplicantAccount.create({ name, email, passwordHash: await hashPassword(password) });
+    res.status(201).json({ user: { name: applicant.name, email: applicant.email, role: 'applicant' } });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ message: 'An account with this email already exists.' });
+    res.status(500).json({ message: 'Unable to create the applicant account.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const applicant = await ApplicantAccount.findOne({ email }).lean();
+    if (!applicant || !await verifyPassword(password, applicant.passwordHash)) {
+      return res.status(401).json({ message: 'The email or password is incorrect.' });
+    }
     res.set('Cache-Control', 'no-store');
-    res.json(notices);
+    res.json({ user: { name: applicant.name, email: applicant.email, role: 'applicant' } });
   } catch (error) {
-    res.status(500).json({ message: 'Unable to load marriage notices.', error: error.message });
+    res.status(500).json({ message: 'Unable to sign in.' });
   }
 });
 
-app.post('/api/notices', async (req, res) => {
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
+  }
+  if (isPasswordResetRateLimited(req.ip || req.socket.remoteAddress || 'unknown')) {
+    return res.status(429).json({ message: 'Too many reset requests. Please try again later.' });
+  }
+
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  if (process.env.NODE_ENV === 'production' && !smtpConfigured) {
+    return res.status(503).json({ message: 'Password reset is temporarily unavailable. Please contact support.' });
+  }
+  if (!APP_AUTH_TOKEN_SECRET) {
+    return res.status(503).json({ message: 'Password recovery is not configured.' });
+  }
+
   try {
-    const { groomFullName, brideFullName, ceremonyDate, message = '', imageData } = req.body;
-    if (!String(groomFullName || '').trim() || !String(brideFullName || '').trim() || !/^\d{4}-\d{2}-\d{2}$/.test(ceremonyDate || '')) {
-      return res.status(400).json({ message: 'Couple names and a ceremony date are required.' });
-    }
-    if (typeof imageData !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(imageData) || imageData.length > 10_000_000) {
-      return res.status(400).json({ message: 'Upload a JPEG, PNG, or WebP image under 7 MB.' });
+    const applicant = await ApplicantAccount.findOne({ email });
+    const responseBody = { message: 'If an account exists for that email, password reset instructions are available.' };
+    if (!applicant) return res.json(responseBody);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    applicant.passwordResetTokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(token).digest('hex');
+    applicant.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await applicant.save();
+
+    const frontendUrl = process.env.FRONTEND_URL || ALLOWED_FRONTEND_ORIGIN;
+    const resetUrl = new URL('/reset-password', frontendUrl);
+    resetUrl.searchParams.set('token', token);
+    if (smtpConfigured) {
+      const nodemailer = require('nodemailer');
+      const port = Number(process.env.SMTP_PORT || 587);
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port,
+        secure: process.env.SMTP_SECURE === 'true' || port === 465,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: applicant.email,
+        subject: 'Reset your WedRings password',
+        text: `Use this link to reset your password. It expires in 30 minutes: ${resetUrl}`,
+        html: `<p>This link expires in 30 minutes.</p><p><a href="${resetUrl}">Reset password</a></p>`,
+      });
+    } else {
+      console.info(`Development password reset link: ${resetUrl}`);
+      responseBody.developmentResetLinkLogged = true;
     }
 
-    const publishedAt = new Date();
-    const notice = await MarriageNotice.create({
-      groomFullName: String(groomFullName).trim(),
-      brideFullName: String(brideFullName).trim(),
-      ceremonyDate,
-      message: String(message).trim().slice(0, 500),
-      imageData,
-      publishedAt,
-      expiresAt: new Date(publishedAt.getTime() + 10 * 24 * 60 * 60 * 1000),
+    res.set('Cache-Control', 'no-store');
+    res.json(responseBody);
+  } catch (error) {
+    console.error('Applicant password reset request failed:', error.message);
+    res.status(500).json({ message: 'Unable to process the password reset request.' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const token = String(req.body.token || '');
+  const password = String(req.body.password || '');
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
+  }
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
+  }
+  if (!APP_AUTH_TOKEN_SECRET) return res.status(503).json({ message: 'Password recovery is not configured.' });
+
+  try {
+    const tokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(token).digest('hex');
+    const applicant = await ApplicantAccount.findOne({
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: { $gt: new Date() },
     });
-    res.status(201).json(notice);
-  } catch (error) {
-    res.status(400).json({ message: 'Unable to publish marriage notice.', error: error.message });
-  }
-});
+    if (!applicant) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
 
-app.delete('/api/notices/:id', async (req, res) => {
-  try {
-    const notice = await MarriageNotice.findByIdAndDelete(req.params.id);
-    if (!notice) return res.status(404).json({ message: 'Marriage notice not found.' });
-    res.status(204).end();
+    applicant.passwordHash = await hashPassword(password);
+    applicant.passwordResetTokenHash = undefined;
+    applicant.passwordResetExpiresAt = undefined;
+    await applicant.save();
+    res.set('Cache-Control', 'no-store');
+    res.json({ message: 'Your password has been reset. You can now log in.' });
   } catch (error) {
-    res.status(400).json({ message: 'Unable to remove marriage notice.', error: error.message });
+    res.status(500).json({ message: 'Unable to reset the password.' });
   }
 });
 
@@ -235,6 +349,23 @@ app.get('/', (req, res) => {
 
 app.post('/api/applications', async (req, res) => {
   try {
+    const appointmentDate = String(req.body.appointmentDate || '').trim();
+    const appointmentTime = String(req.body.appointmentTime || '').trim();
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)
+      ? new Date(`${appointmentDate}T00:00:00Z`)
+      : null;
+    if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== appointmentDate) {
+      return res.status(400).json({ message: 'Enter a valid appointment date.' });
+    }
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (appointmentDate < todayKey) {
+      return res.status(400).json({ message: 'Appointment dates cannot be in the past.' });
+    }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)) {
+      return res.status(400).json({ message: 'Enter a valid appointment time.' });
+    }
+
     const application = await Application.create({
       ...req.body,
       status: 'For Review',
@@ -286,7 +417,10 @@ app.get('/api/applications/:id/print', async (req, res) => {
     res.type('html').send(printForm);
   } catch (error) {
     console.error('Application print form error:', error.message);
-    res.status(500).json({ message: 'Unable to prepare the application print form.' });
+    res.status(500).json({
+      message: 'Unable to prepare the application print form.',
+      ...(process.env.NODE_ENV !== 'production' ? { error: error.message } : {}),
+    });
   }
 });
 
@@ -365,28 +499,28 @@ app.put('/api/applications/:id/status', async (req, res) => {
   }
 });
 
-app.put('/api/applications/:id/license', async (req, res) => {
+app.put('/api/applications/:id/license-release-date', async (req, res) => {
   try {
-    const licenseNumber = String(req.body.licenseNumber || '').trim();
-    if (!licenseNumber || licenseNumber.length > 80) {
-      return res.status(400).json({ message: 'Enter a marriage license number up to 80 characters.' });
+    const releaseDate = String(req.body.releaseDate || '').trim();
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(releaseDate)
+      ? new Date(`${releaseDate}T00:00:00Z`)
+      : null;
+    if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== releaseDate) {
+      return res.status(400).json({ message: 'Enter a valid license release date.' });
     }
 
     const application = await Application.findById(req.params.id);
     if (!application) return res.status(404).json({ message: 'Application not found.' });
     if (application.status !== 'Verified') {
-      return res.status(409).json({ message: 'Only verified applications can be issued a marriage license.' });
-    }
-    if (application.marriageLicenseIssuedAt) {
-      return res.status(409).json({ message: 'A marriage license has already been issued for this application.' });
+      return res.status(409).json({ message: 'Only verified applicants can be given a license release date.' });
     }
 
-    application.marriageLicenseNumber = licenseNumber;
-    application.marriageLicenseIssuedAt = new Date();
+    application.licenseReleaseDate = releaseDate;
+    application.set('notificationReads.licenseRelease', undefined);
     await application.save();
     res.json(application.toObject());
   } catch (error) {
-    res.status(400).json({ message: 'Unable to issue marriage license.', error: error.message });
+    res.status(400).json({ message: 'Unable to set the license release date.', error: error.message });
   }
 });
 
@@ -436,7 +570,7 @@ app.put('/api/applications/:id/documents/:documentKey/review', async (req, res) 
 app.put('/api/applications/:id/notifications/:notificationKey/read', async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(appointment|rejected|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(appointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

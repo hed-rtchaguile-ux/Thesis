@@ -280,6 +280,28 @@
   position: relative;
 }
 
+.admin-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-account-trigger:focus-visible {
+  outline: 2px solid #6078ad;
+  outline-offset: 4px;
+}
+
+.admin-user-caret {
+  color: #586785;
+  font-size: 12px;
+}
+
 .user-dropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -394,14 +416,14 @@
 }
 
 .notification-count {
-  display: grid;
-  width: 24px;
-  height: 24px;
+  display: inline-flex;
+  min-height: 28px;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  color: #ffffff;
-  background: #a84e4e;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #6e7895;
+  background: #f0f2f7;
   font-size: 12px;
   font-weight: 700;
 }
@@ -432,6 +454,18 @@
 .applicant-notification:hover {
   border-color: rgba(168, 78, 78, 0.45);
   background: #fffafa;
+}
+
+.applicant-notification.read {
+  border-color: rgba(125, 136, 168, 0.16);
+  color: #6e7895;
+  background: #f8f9fb;
+  cursor: default;
+}
+
+.applicant-notification.read:hover {
+  border-color: rgba(125, 136, 168, 0.16);
+  background: #f8f9fb;
 }
 
 .notification-icon {
@@ -607,6 +641,35 @@
   box-shadow: 0 24px 60px rgba(28, 36, 61, 0.24);
 }
 
+.admin-profile-modal {
+  width: min(100%, 460px);
+}
+
+.admin-profile-details {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-profile-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.admin-profile-row span {
+  color: #697795;
+}
+
+.admin-profile-row strong {
+  overflow-wrap: anywhere;
+  color: #2d3550;
+}
+
 .applicant-modal-header,
 .applicant-modal-actions {
   display: flex;
@@ -771,6 +834,52 @@
 
 .admin-document-review-row p {
   margin: 0 0 6px;
+}
+
+.admin-document-review-row h5,
+.admin-submitted-document h5 {
+  margin: 0 0 8px;
+  color: #2d3550;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-submitted-document {
+  padding: 10px 0;
+  border-top: 1px solid rgba(125, 136, 168, 0.12);
+}
+
+.document-preview-image-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.document-preview-image {
+  display: block;
+  max-width: min(100%, 520px);
+  max-height: 420px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  border-radius: 4px;
+  background: #fff;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.document-preview-pdf object {
+  display: block;
+  width: min(100%, 620px);
+  height: 360px;
+  border: 1px solid rgba(125, 136, 168, 0.2);
+  background: #fff;
+}
+
+.document-preview-pdf a,
+.document-preview-filename,
+.document-preview-unavailable {
+  color: #697795;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .document-review-status {
@@ -980,16 +1089,45 @@
   background: #f9f0f5;
 }
 
-.license-issued-label {
-  max-width: 220px;
-  padding: 7px 10px;
-  border: 1px solid #b9d1c2;
-  border-radius: 5px;
-  color: #315d4d;
-  background: #edf5ef;
-  font-size: 11px;
+.license-release-control {
+  display: grid;
+  grid-template-columns: minmax(145px, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+  min-width: min(100%, 310px);
+}
+
+.license-release-control label {
+  display: grid;
+  gap: 4px;
+  color: #53689f;
+  font-size: 10px;
   font-weight: 700;
-  overflow-wrap: anywhere;
+}
+
+.license-release-control input {
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid rgba(125, 136, 168, 0.3);
+  border-radius: 5px;
+  color: #2d3550;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.license-release-control small {
+  grid-column: 1 / -1;
+  font-size: 10px;
+}
+
+.license-release-error {
+  color: #9b4a4a;
+}
+
+.license-release-success {
+  color: #39704b;
 }
 
 .admin-verify-button:disabled,
@@ -1060,18 +1198,6 @@
 .admin-appointment-panel-heading > span {
   color: #697795;
   font-size: 12px;
-}
-
-.admin-schedule-readonly-note {
-  color: #697795;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.admin-schedule-date {
-  color: #315d4d;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .admin-appointment-controls {
@@ -1204,18 +1330,21 @@
 .print-form-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 100;
   overflow: auto;
-  padding: 28px;
+  padding: 12px;
   background: rgba(21, 28, 45, 0.68);
 }
 
 .print-form-modal {
-  width: min(1180px, 100%);
-  margin: 0 auto;
-  padding: 18px;
-  border-radius: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
   background: #fff;
+  box-shadow: none;
 }
 
 .print-form-actions {
@@ -1610,6 +1739,11 @@
 
   .applicant-notifications {
     padding: 14px;
+  }
+
+  .applicant-notifications-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .applicant-notification {

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
+import LocationFields from './LocationFields'
 import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Legal Docs', 'Appointment', 'Payment', 'Review']
@@ -15,22 +16,6 @@ const documentFields = [
   { key: 'psaMarriageLicense', label: '6. PSA Marriage License (if applicable)' },
   { key: 'barangayClearance', label: '7. Barangay Clearance / Residency *' },
   { key: 'additionalRequirement', label: '8. Additional Requirement / Affidavit' },
-]
-
-const extraInfoFields = [
-  { key: 'age', label: 'Age' },
-  { key: 'placeOfBirth', label: 'Place of Birth' },
-  { key: 'residence', label: 'Residence' },
-  { key: 'religion', label: 'Religion' },
-  { key: 'fatherName', label: "Father's Name" },
-  { key: 'motherMaidenName', label: "Mother's Maiden Name" },
-  { key: 'citizenship', label: 'Citizenship' },
-  { key: 'previouslyMarried', label: 'Previously Married?' },
-  { key: 'dateOfMarriage', label: 'Date of Marriage' },
-  { key: 'occupation', label: 'Occupation' },
-  { key: 'contactNumber', label: 'Contact Number' },
-  { key: 'parentConsent', label: 'Parent Consent' },
-  { key: 'declaration', label: 'Declaration' },
 ]
 
 const initialForm = {
@@ -185,26 +170,6 @@ const initialForm = {
 
 const namePattern = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function isValidDate(value) {
-  const normalizedValue = value.replace(/-/g, '/')
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(normalizedValue)
-  if (!match) return false
-
-  const [, month, day, year] = match
-  const date = new Date(Number(year), Number(month) - 1, Number(day))
-  return date.getFullYear() === Number(year)
-    && date.getMonth() === Number(month) - 1
-    && date.getDate() === Number(day)
-    && date < new Date()
-}
-
-function formatDateInput(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 8)
-  if (digits.length <= 2) return digits
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
-}
 
 function getLocalDateInputValue() {
   const now = new Date()
@@ -465,11 +430,10 @@ export default function ApplicantRegistration() {
       const parsedAppointmentDate = new Date(`${appointmentDate}T00:00:00`)
       const today = new Date()
       today.setHours(0, 0, 0, 0)
-
       if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)
         || Number.isNaN(parsedAppointmentDate.getTime())
         || parsedAppointmentDate < today) {
-        errors.appointmentDate = 'Choose a valid date that is not in the past.'
+        errors.appointmentDate = 'Choose today or a future appointment date.'
       }
       if (!/^\d{2}:\d{2}$/.test(form.appointmentTime)) {
         errors.appointmentTime = 'Choose an appointment time.'
@@ -492,10 +456,6 @@ export default function ApplicantRegistration() {
 
     const submittedForm = {
       ...form,
-      preferredAppointmentDate: form.appointmentDate,
-      preferredAppointmentTime: form.appointmentTime,
-      appointmentDate: 'To be assigned by office',
-      appointmentTime: '',
       groomFullName: [form.groomFirstName, form.groomMiddleName, form.groomLastName, form.groomSuffix].filter(Boolean).join(' ').trim(),
       groomDob: [form.groomDobMonth, form.groomDobDay, form.groomDobYear].filter(Boolean).join('/'),
       groomAge: getAgeFromDob('groom') ?? '',
@@ -683,79 +643,6 @@ export default function ApplicantRegistration() {
     })
   }
 
-  const renderExtraInformation = () => {
-    const previousField = `${person}PreviouslyMarried`
-    const isPreviouslyMarried = (form[previousField] || '').toLowerCase() === 'yes'
-
-    return (
-      <>
-        <div className="extended-form-grid">
-          {extraInfoFields.map(({ key, label }) => (
-            <div key={`${person}-${key}`} className="field-group">
-              <label>{label}</label>
-              {key === 'previouslyMarried' ? (
-                <select
-                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
-                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
-              ) : (
-                <input
-                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
-                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
-                  placeholder={label}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {isPreviouslyMarried && (
-          <div className="dissolution-table-wrap">
-            <div className="dissolution-table-header">If previously married: how was it dissolved?</div>
-            <div className="dissolution-table">
-              <div className="field-group">
-                <label>How was it dissolved?</label>
-                <select
-                  value={form[`${person}DissolutionMethod`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionMethod`, e.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="Death of spouse">Death of spouse</option>
-                  <option value="Annulment">Annulment</option>
-                  <option value="Divorce">Divorce</option>
-                  <option value="Legal separation">Legal separation</option>
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label>Place where dissolved</label>
-                <input
-                  value={form[`${person}DissolutionPlace`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionPlace`, e.target.value)}
-                  placeholder="Place"
-                />
-              </div>
-
-              <div className="field-group">
-                <label>When dissolved</label>
-                <input
-                  value={form[`${person}DissolutionDate`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionDate`, formatDateInput(e.target.value))}
-                  placeholder="MM/DD/YYYY"
-                  maxLength={10}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
-
   const renderGroomBrideForm = () => {
     const firstField = `${person}FirstName`
     const middleField = `${person}MiddleName`
@@ -785,6 +672,19 @@ export default function ApplicantRegistration() {
         </div>
       )
     }
+    const renderRelativeLocationFields = (suffix) => (
+      <LocationFields
+        form={form}
+        fields={{
+          country: `${person}${suffix}Country`,
+          province: `${person}${suffix}Province`,
+          city: `${person}${suffix}City`,
+          barangay: `${person}${suffix}Barangay`,
+        }}
+        onChange={updateField}
+        includeBarangay
+      />
+    )
 
     return (
       <>
@@ -888,22 +788,11 @@ export default function ApplicantRegistration() {
             </div>
             <FieldError message={validationErrors[`${person}Dob`]} />
 
-            <div className="form-grid three-col">
-              <div className="field-group">
-                <label>Country</label>
-                <input value={form[birthCountryField]} onChange={(e) => updateField(birthCountryField, e.target.value)} placeholder="Country" />
-              </div>
-
-              <div className="field-group">
-                <label>Province</label>
-                <input value={form[birthProvinceField]} onChange={(e) => updateField(birthProvinceField, e.target.value)} placeholder="Province" />
-              </div>
-
-              <div className="field-group">
-                <label>City/Municipality</label>
-                <input value={form[birthCityField]} onChange={(e) => updateField(birthCityField, e.target.value)} placeholder="City/Municipality" />
-              </div>
-            </div>
+            <LocationFields
+              form={form}
+              fields={{ country: birthCountryField, province: birthProvinceField, city: birthCityField }}
+              onChange={updateField}
+            />
             </>}
 
             {personStep === 3 && <>
@@ -931,30 +820,17 @@ export default function ApplicantRegistration() {
               <input value={form[religionField]} onChange={(e) => updateField(religionField, e.target.value)} placeholder="Religion / Religious Sect" />
             </div>
 
-            <div className="form-grid three-col">
-              <div className="field-group">
-                <label>Country</label>
-                <input value={form[residenceCountryField]} onChange={(e) => updateField(residenceCountryField, e.target.value)} placeholder="Country" />
-              </div>
+            <LocationFields
+              form={form}
+              fields={{ country: residenceCountryField, province: residenceProvinceField, city: residenceCityField, barangay: barangayField }}
+              onChange={updateField}
+              includeBarangay
+            />
 
-              <div className="field-group">
-                <label>Province</label>
-                <input value={form[residenceProvinceField]} onChange={(e) => updateField(residenceProvinceField, e.target.value)} placeholder="Province" />
-              </div>
-
-              <div className="field-group">
-                <label>City/Municipality</label>
-                <input value={form[residenceCityField]} onChange={(e) => updateField(residenceCityField, e.target.value)} placeholder="City/Municipality" />
-              </div>
-
+            <div className="form-grid two-col">
               <div className="field-group">
                 <label>House Number</label>
                 <input value={form[houseNoField]} onChange={(e) => updateField(houseNoField, e.target.value)} placeholder="House No." />
-              </div>
-
-              <div className="field-group">
-                <label>Barangay</label>
-                <input value={form[barangayField]} onChange={(e) => updateField(barangayField, e.target.value)} placeholder="Barangay" />
               </div>
 
               <div className="field-group">
@@ -1023,20 +899,15 @@ export default function ApplicantRegistration() {
                   />
                 </div>
 
-                <div className="form-grid three-col" style={{ marginTop: '12px' }}>
-                  <div className="field-group">
-                    <label>Country</label>
-                    <input value={form[`${person}DissolutionCountry`] ?? ''} onChange={(event) => updateField(`${person}DissolutionCountry`, event.target.value)} placeholder="Country" />
-                  </div>
-                  <div className="field-group">
-                    <label>Province</label>
-                    <input value={form[`${person}DissolutionProvince`] ?? ''} onChange={(event) => updateField(`${person}DissolutionProvince`, event.target.value)} placeholder="Province" />
-                  </div>
-                  <div className="field-group">
-                    <label>City/Municipality</label>
-                    <input value={form[`${person}DissolutionCity`] ?? ''} onChange={(event) => updateField(`${person}DissolutionCity`, event.target.value)} placeholder="City/Municipality" />
-                  </div>
-                </div>
+                <LocationFields
+                  form={form}
+                  fields={{
+                    country: `${person}DissolutionCountry`,
+                    province: `${person}DissolutionProvince`,
+                    city: `${person}DissolutionCity`,
+                  }}
+                  onChange={updateField}
+                />
 
                 <div className="form-grid three-col" style={{ marginTop: '12px' }}>
                   <div className="field-group">
@@ -1079,16 +950,9 @@ export default function ApplicantRegistration() {
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
+                {renderRelativeLocationFields('FatherResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('FatherResidenceCountry', 'Country')}
-                  {renderLabeledRelativeField('FatherResidenceProvince', 'Province')}
-                </div>
-                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('FatherResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('FatherResidenceHouseNo', 'House No.')}
-                  {renderLabeledRelativeField('FatherResidenceBarangay', 'Barangay')}
-                </div>
-                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('FatherResidenceStreet', 'Street')}
                 </div>
               </div>
@@ -1118,16 +982,9 @@ export default function ApplicantRegistration() {
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
+                {renderRelativeLocationFields('MotherResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('MotherResidenceCountry', 'Country')}
-                  {renderLabeledRelativeField('MotherResidenceProvince', 'Province')}
-                </div>
-                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('MotherResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('MotherResidenceHouseNo', 'House No.')}
-                  {renderLabeledRelativeField('MotherResidenceBarangay', 'Barangay')}
-                </div>
-                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('MotherResidenceStreet', 'Street')}
                 </div>
               </div>
@@ -1158,16 +1015,9 @@ export default function ApplicantRegistration() {
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
+                {renderRelativeLocationFields('AdvisorResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('AdvisorResidenceCountry', 'Country')}
-                  {renderLabeledRelativeField('AdvisorResidenceProvince', 'Province')}
-                </div>
-                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
-                  {renderLabeledRelativeField('AdvisorResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('AdvisorResidenceHouseNo', 'House No.')}
-                  {renderLabeledRelativeField('AdvisorResidenceBarangay', 'Barangay')}
-                </div>
-                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('AdvisorResidenceStreet', 'Street')}
                 </div>
               </div>
@@ -1217,7 +1067,7 @@ export default function ApplicantRegistration() {
     <div className="appointment-form-layout">
       <div className="appointment-fields">
         <div className="field-group">
-          <label htmlFor="appointment-date">Suggested Appointment Date *</label>
+          <label htmlFor="appointment-date">Appointment Date *</label>
           <input
             id="appointment-date"
             type="date"
@@ -1229,9 +1079,8 @@ export default function ApplicantRegistration() {
           />
           <FieldError message={validationErrors.appointmentDate} />
         </div>
-
         <div className="field-group">
-          <label htmlFor="appointment-time">Suggested Appointment Time *</label>
+          <label htmlFor="appointment-time">Appointment Time *</label>
           <input
             id="appointment-time"
             type="time"
@@ -1242,11 +1091,11 @@ export default function ApplicantRegistration() {
           />
           <FieldError message={validationErrors.appointmentTime} />
         </div>
-
         <div className="field-group">
           <label>Office Location</label>
           <input value={form.appointmentLocation} readOnly />
         </div>
+        <p className="appointment-assignment-note">Choose an appointment date and time. The office will review the requested schedule.</p>
       </div>
     </div>
   )
@@ -1422,7 +1271,7 @@ export default function ApplicantRegistration() {
             {documentFields.map(({ key, label }) => (
               <div key={key} className="official-doc-item">
                 <span>{label}</span>
-                <strong>{documents[key] || 'Not uploaded'}</strong>
+                <strong>{typeof documents[key] === 'string' ? documents[key] : documents[key]?.name || 'Not uploaded'}</strong>
               </div>
             ))}
           </div>
@@ -1488,7 +1337,7 @@ export default function ApplicantRegistration() {
             ) : step === 4 ? (
               <>
                 <h3>Appointment</h3>
-                <p className="section-subtitle">Enter your suggested appointment date and time. The office will confirm the schedule at Villaverde.</p>
+                <p className="section-subtitle">Choose your appointment date and time at Villaverde.</p>
                 {renderAppointmentForm()}
               </>
             ) : step === 5 ? (

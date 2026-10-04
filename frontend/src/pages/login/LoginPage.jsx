@@ -17,20 +17,25 @@ export default function LoginPage() {
     return <Navigate to={`/${user.role}/dashboard`} replace />
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     setIsSubmitting(true)
 
-    const result = login(email, password)
-    if (!result.success) {
-      setError(result.message)
-      setIsSubmitting(false)
-      return
-    }
+    try {
+      const result = await login(email, password)
+      if (!result.success) {
+        setError(result.message)
+        return
+      }
 
-    const destination = location.state?.from?.pathname || `/${result.role}/dashboard`
-    navigate(destination, { replace: true })
+      const destination = location.state?.from?.pathname || `/${result.role}/dashboard`
+      navigate(destination, { replace: true })
+    } catch {
+      setError('Unable to sign in. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -67,14 +72,14 @@ export default function LoginPage() {
                 <input type="checkbox" />
                 <span>Remember me</span>
               </label>
-              <a href="#" className="text-link">Forgot password?</a>
+              <Link to="/forgot-password" className="text-link">Forgot password?</Link>
             </div>
 
             {error && <p className="form-error" role="alert">{error}</p>}
             <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Log In'}</button>
           </form>
 
-          <p className="signup-link">Don't have an account? <a href="#">Register</a></p>
+          <p className="signup-link">Don't have an account? <Link to="/register">Register</Link></p>
 
           <details className="demo-access">
             <summary>View demo access</summary>

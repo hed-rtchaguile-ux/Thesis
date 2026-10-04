@@ -12,6 +12,16 @@ export function filterApplications(applications, searchTerm) {
   ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch)))
 }
 
+export function getAppointmentDate(application) {
+  return application.appointmentDate && application.appointmentDate !== 'To be assigned by office'
+    ? application.appointmentDate
+    : ''
+}
+
+export function getAppointmentTime(application) {
+  return getAppointmentDate(application) ? application.appointmentTime || '' : ''
+}
+
 function getAppointmentTimeValue(value) {
   const normalizedValue = String(value || '').trim()
   const twelveHourTime = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(normalizedValue)
@@ -28,13 +38,15 @@ function getAppointmentTimeValue(value) {
 
 export function sortAppointments(applications, getDateKey) {
   return [...applications].sort((firstApplication, secondApplication) => {
-    const firstDate = getDateKey(firstApplication.appointmentDate)
-    const secondDate = getDateKey(secondApplication.appointmentDate)
+    const firstDate = getDateKey(getAppointmentDate(firstApplication))
+    const secondDate = getDateKey(getAppointmentDate(secondApplication))
     if (firstDate && !secondDate) return -1
     if (!firstDate && secondDate) return 1
     if (firstDate !== secondDate) return firstDate.localeCompare(secondDate)
 
-    const timeDifference = getAppointmentTimeValue(firstApplication.appointmentTime) - getAppointmentTimeValue(secondApplication.appointmentTime)
+    const firstTime = getAppointmentTime(firstApplication)
+    const secondTime = getAppointmentTime(secondApplication)
+    const timeDifference = getAppointmentTimeValue(firstTime) - getAppointmentTimeValue(secondTime)
     if (timeDifference) return timeDifference
 
     const firstNames = `${firstApplication.groomFullName || ''} ${firstApplication.brideFullName || ''}`

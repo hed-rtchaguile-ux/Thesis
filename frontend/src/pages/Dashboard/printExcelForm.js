@@ -12,10 +12,22 @@ export async function printExcelForm(applicationId) {
 
   try {
     const response = await apiFetch(`/api/applications/${applicationId}/print`)
-    if (!response.ok) throw new Error('Unable to prepare the application form for printing.')
+    const contentType = response.headers.get('content-type') || ''
+    const responseContent = contentType.includes('application/json')
+      ? await response.json()
+      : await response.text()
+    if (!response.ok) {
+      const message = typeof responseContent === 'object'
+        ? responseContent.message || responseContent.error
+        : responseContent
+      throw new Error(message || `Unable to prepare the application form (HTTP ${response.status}).`)
+    }
+    if (typeof responseContent !== 'string' || !responseContent.toLowerCase().includes('<html')) {
+      throw new Error('The print service returned an invalid application form.')
+    }
 
     printWindow.document.open()
-    printWindow.document.write(await response.text())
+    printWindow.document.write(responseContent)
     printWindow.document.close()
     window.setTimeout(() => {
       if (printWindow.closed) return

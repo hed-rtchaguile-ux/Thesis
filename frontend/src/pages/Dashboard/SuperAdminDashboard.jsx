@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { NoticeManager, ReportCards } from './AdminTools'
-import { filterApplications, sortAppointments } from './applicationSearch'
+import DocumentPreview from './DocumentPreview'
+import LicenseReleaseControl from './LicenseReleaseControl'
+import { ReportCards } from './AdminTools'
+import { filterApplications, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
 
@@ -29,7 +31,6 @@ export default function SuperAdminDashboard() {
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
   const [updatingDocumentKey, setUpdatingDocumentKey] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [licenseError, setLicenseError] = useState('')
 
   useEffect(() => {
     fetch('/api/applications')
@@ -72,30 +73,6 @@ export default function SuperAdminDashboard() {
     if (confirmed) updateApplicationStatus(applicationId, 'Verified')
   }
 
-  async function issueMarriageLicense(applicationId) {
-    const licenseNumber = window.prompt('Enter the marriage license number to issue:')
-    if (!licenseNumber?.trim()) return
-
-    setLicenseError('')
-    setUpdatingId(applicationId)
-    try {
-      const response = await fetch(`/api/applications/${applicationId}/license`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licenseNumber }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Unable to issue marriage license.')
-      setApplications((currentApplications) => currentApplications.map((application) => (
-        application._id === result._id ? result : application
-      )))
-    } catch (error) {
-      setLicenseError(error.message)
-    } finally {
-      setUpdatingId('')
-    }
-  }
-
   async function updateDocumentReview(applicationId, documentKey, reviewStatus, reviewNote = '') {
     setUpdatingDocumentKey(documentKey)
     try {
@@ -119,7 +96,6 @@ export default function SuperAdminDashboard() {
   const selectedApplication = applications.find((application) => application._id === selectedApplicationId)
   const isAppointmentsPage = location.pathname === '/superadmin/appointments'
   const isReportsPage = location.pathname === '/superadmin/reports'
-  const isNoticesPage = location.pathname === '/superadmin/notices'
   const appointmentApplications = sortAppointments(applications, getAppointmentDateKey)
   const visibleApplications = filterApplications(isAppointmentsPage ? appointmentApplications : applications, searchTerm)
 
@@ -131,7 +107,7 @@ export default function SuperAdminDashboard() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Super admin navigation">
-          <button type="button" className={`nav-item ${!isAppointmentsPage && !isReportsPage && !isNoticesPage ? 'active' : ''}`} onClick={() => navigate('/superadmin/dashboard')}>
+          <button type="button" className={`nav-item ${!isAppointmentsPage && !isReportsPage ? 'active' : ''}`} onClick={() => navigate('/superadmin/dashboard')}>
             <span className="nav-icon" aria-hidden="true">⌂</span>
             <span>Dashboard</span>
           </button>
@@ -140,7 +116,6 @@ export default function SuperAdminDashboard() {
             <span>Appointments</span>
           </button>
           <button type="button" className={`nav-item ${isReportsPage ? 'active' : ''}`} onClick={() => navigate('/superadmin/reports')}><span className="nav-icon" aria-hidden="true">▤</span><span>Reports</span></button>
-          <button type="button" className={`nav-item ${isNoticesPage ? 'active' : ''}`} onClick={() => navigate('/superadmin/notices')}><span className="nav-icon" aria-hidden="true">♡</span><span>10-day notices</span></button>
         </nav>
 
         <button
@@ -171,7 +146,7 @@ export default function SuperAdminDashboard() {
         </header>
 
         <div className="dashboard-panel admin-dashboard-panel">
-          {!isAppointmentsPage && !isNoticesPage && <div className="welcome-banner">
+          {!isAppointmentsPage && <div className="welcome-banner">
             <div className="banner-icon" aria-hidden="true">▤</div>
             <div className="banner-copy">
               <h2>Super admin control</h2>
@@ -179,16 +154,14 @@ export default function SuperAdminDashboard() {
             </div>
           </div>}
 
-          {isAppointmentsPage && <section className="admin-appointment-panel" aria-label="Applicant appointment schedule">
-            <div className="admin-appointment-panel-heading"><div><span className="admin-review-kicker">Read-only schedule</span><h2>Applicant appointments</h2></div><span>{applications.filter((application) => getAppointmentDateKey(application.appointmentDate)).length} scheduled</span></div>
-            <p className="admin-schedule-readonly-note">All applicants are listed by appointment date and time. Applicants without a scheduled appointment appear at the end.</p>
+          {isAppointmentsPage && <section className="admin-appointment-panel" aria-label="Appointment assignment">
+            <div className="admin-appointment-panel-heading"><div><span className="admin-review-kicker">Applicant schedules</span><h2>Appointments</h2></div><span>{applications.filter((application) => getAppointmentDateKey(getAppointmentDate(application))).length} scheduled</span></div>
+            <p className="admin-schedule-readonly-note">Applicants select their appointment date and time during registration.</p>
           </section>}
 
-          {(location.pathname === '/superadmin/dashboard' || isReportsPage) && <ReportCards applications={applications} />}
+          {isReportsPage && <ReportCards applications={applications} />}
 
-          {isNoticesPage && <NoticeManager />}
-
-          {!isAppointmentsPage && !isNoticesPage && <div className="summary-grid">
+          {!isAppointmentsPage && <div className="summary-grid">
             <article className="summary-card">
               <div className="card-icon" aria-hidden="true">▣</div>
               <div className="summary-copy">
@@ -214,16 +187,18 @@ export default function SuperAdminDashboard() {
             </article>
           </div>}
 
-          {!isNoticesPage && <section className="quick-actions admin-review-panel" id="admin-queue">
+          <section className="quick-actions admin-review-panel" id="admin-queue">
             <div className="admin-section-heading">
               <h3>{isAppointmentsPage ? 'Scheduled applicants' : isReportsPage ? 'Applicants' : 'Verification Queue'}</h3>
               <input className="admin-applicant-search" type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search names, email, or phone" aria-label="Search applicants" />
             </div>
 
-            {licenseError && <p className="admin-appointment-error" role="alert">{licenseError}</p>}
             {visibleApplications.length === 0 && <p className="admin-empty-state">{searchTerm ? 'No applicants match your search.' : 'No submitted applicants yet.'}</p>}
 
             {visibleApplications.map((application) => {
+              const appointmentDate = getAppointmentDate(application)
+              const appointmentTime = getAppointmentTime(application)
+
               return (
                 <div key={application._id}>
                   <div className="admin-application-row">
@@ -233,18 +208,18 @@ export default function SuperAdminDashboard() {
                       <small>{application.applicantEmail}</small>
                     </div>
                     <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
-                    {isAppointmentsPage && <small className="admin-schedule-date">{application.appointmentDate ? `${application.appointmentDate} · ${application.appointmentTime || 'Time not set'}` : 'Appointment not scheduled'}</small>}
+                    {isAppointmentsPage && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     {!isAppointmentsPage && <>
                       <button className="admin-verify-button" type="button" onClick={() => confirmVerification(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Verified' ? 'Verified' : 'Verify'}</button>
                       <button className="admin-reject-button" type="button" onClick={() => confirmRejection(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Rejected' ? 'Rejected' : 'Reject'}</button>
-                      {application.marriageLicenseIssuedAt ? <span className="license-issued-label">License issued: {application.marriageLicenseNumber}</span> : application.status === 'Verified' && <button className="admin-verify-button" type="button" onClick={() => issueMarriageLicense(application._id)} disabled={updatingId === application._id}>{updatingId === application._id ? 'Issuing...' : 'Issue license'}</button>}
+                      {application.status === 'Verified' && <LicenseReleaseControl application={application} onSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))} />}
                     </>}
                   </div>
 
                 </div>
               )
             })}
-          </section>}
+          </section>
         </div>
       </section>
 
@@ -280,9 +255,9 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
     <div className="admin-details-panel">
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
-      <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Date:</strong> {application.appointmentDate || 'Not provided'}</p><p><strong>Time:</strong> {application.appointmentTime || 'Not provided'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
-      <div className="admin-details-group"><h4>Marriage license</h4><p><strong>Number:</strong> {application.marriageLicenseNumber || 'Not issued'}</p><p><strong>Issued:</strong> {application.marriageLicenseIssuedAt ? new Date(application.marriageLicenseIssuedAt).toLocaleDateString() : 'Not issued'}</p></div>
-      <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><p><strong>{key}:</strong> {value}</p><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
+      <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
+      <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
+        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">
         <div className="admin-document-review-heading">
           <div>
