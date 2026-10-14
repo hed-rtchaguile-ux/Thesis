@@ -3,14 +3,35 @@ const os = require('node:os');
 const fs = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { pathToFileURL } = require('node:url');
 const ExcelJS = require('exceljs');
 
 const FORM_ROWS = 98;
 const FORM_COLUMNS = 33;
 const TEMPLATE_PATH = path.join(__dirname, '..', 'frontend', 'public', 'marriage-license-template.xlsx');
-const EXCEL_EXPORT_SCRIPT = path.join(__dirname, 'exportPrintPdf.ps1');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const execFileAsync = promisify(execFile);
+const PDF_BROWSER_PATHS = [
+  process.env.CHROME_PATH,
+  process.env.EDGE_PATH,
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+].filter(Boolean);
+
+async function findPdfBrowser() {
+  for (const browserPath of PDF_BROWSER_PATHS) {
+    try {
+      await fs.access(browserPath);
+      return browserPath;
+    } catch {
+      // Try the next standard browser installation path.
+    }
+  }
+
+  throw new Error('Install Chrome or Edge, or set CHROME_PATH or EDGE_PATH to its executable.');
+}
 
 function join(values, separator = ', ') {
   return values.filter(Boolean).join(separator);
@@ -144,42 +165,77 @@ function fillPerson(sheet, application, person, side) {
 }
 
 function fillTemplate(sheet, application) {
+  const groomMaritalHistoryCell = sheet.getCell('A38');
+  groomMaritalHistoryCell.alignment = {
+    ...groomMaritalHistoryCell.alignment,
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true,
+  };
   fillPerson(sheet, application, 'groom', 'groom');
   fillPerson(sheet, application, 'bride', 'bride');
 }
 
 async function buildPrintFormPdf(application) {
   const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'wedrings-print-'));
-  const workbookPath = path.join(tempDirectory, 'application.xlsx');
+  const htmlPath = path.join(tempDirectory, 'application.html');
   const pdfPath = path.join(tempDirectory, 'application.pdf');
 
   try {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(TEMPLATE_PATH);
-  const sheet = workbook.getWorksheet('Front');
-  if (!sheet) throw new Error('The workbook does not contain its Front form sheet.');
+    const formTable = await buildPrintFormHtml(application);
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: 8.5in 13in; margin: 0.25in; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; }
+    .print-page { width: 8in; height: 12.5in; overflow: hidden; }
+    .excel-form-table { width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 0; transform-origin: top left; }
+    .excel-form-table td { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <main class="print-page">${formTable}</main>
+  <script>
+    (() => {
+      const page = document.querySelector('.print-page');
+      const table = page?.querySelector('.excel-form-table');
+      if (!page || !table) throw new Error('The marriage license form could not be laid out for printing.');
 
-  sheet.getCell('P28').value = null;
-  sheet.pageSetup.fitToPage = true;
-  sheet.pageSetup.fitToWidth = 1;
-  sheet.pageSetup.fitToHeight = 1;
-  sheet.pageSetup.scale = undefined;
-  sheet.pageSetup.orientation = 'portrait';
+      const formHeight = table.getBoundingClientRect().height;
+      const printableHeight = 12.5 * 96;
+      const pageFillFactor = 1.25;
+      if (!formHeight) throw new Error('The marriage license form has no printable dimensions.');
 
-  fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
-  await workbook.xlsx.writeFile(workbookPath);
-  await execFileAsync('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    EXCEL_EXPORT_SCRIPT,
-    workbookPath,
-    pdfPath,
-  ], { timeout: 30000 });
+      table.style.transform = \`scaleY(\${Math.min(1, (printableHeight / formHeight) * pageFillFactor)})\`;
+    })();
+  </script>
+</body>
+</html>`;
+    await fs.writeFile(htmlPath, html, 'utf8');
 
-  return await fs.readFile(pdfPath);
+    const browserPath = await findPdfBrowser();
+    await execFileAsync(browserPath, [
+      '--headless',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--no-pdf-header-footer',
+      `--user-data-dir=${path.join(tempDirectory, 'browser-profile')}`,
+      `--print-to-pdf=${pdfPath}`,
+      pathToFileURL(htmlPath).href,
+    ], { timeout: 30000 });
+
+    const pdf = await fs.readFile(pdfPath);
+    if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+      throw new Error('The browser did not produce a valid PDF file.');
+    }
+    return pdf;
   } finally {
     await fs.rm(tempDirectory, { recursive: true, force: true });
   }
@@ -259,9 +315,13 @@ function mergeLayout(sheet) {
     const topRightCell = sheet.getCell(startCell.row, visibleEndColumn);
     const bottomLeftCell = sheet.getCell(Math.min(endCell.row, FORM_ROWS), visibleStartColumn);
     const bottomRightCell = sheet.getCell(Math.min(endCell.row, FORM_ROWS), visibleEndColumn);
+    const visibleRowSpan = Array.from(
+      { length: Math.min(endCell.row, FORM_ROWS) - startCell.row + 1 },
+      (_, index) => startCell.row + index,
+    ).filter((rowNumber) => !sheet.getRow(rowNumber).hidden).length;
 
     starts.set(visibleStartCell.address, {
-      rowSpan: Math.min(endCell.row, FORM_ROWS) - startCell.row + 1,
+      rowSpan: visibleRowSpan,
       colSpan: visibleColumns.length,
       valueSource: startCell.address,
       borders: {
@@ -310,6 +370,7 @@ async function buildPrintFormHtml(application) {
 
   for (let rowNumber = 1; rowNumber <= FORM_ROWS; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
+    if (row.hidden) continue;
     const cells = [];
     for (let column = 1; column <= FORM_COLUMNS; column += 1) {
       if (sheet.getColumn(column).hidden) continue;

@@ -454,6 +454,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ message: 'An account with this email already exists.' });
+    console.error('Registration failed:', error.message);
     res.status(500).json({ message: 'Unable to create the account.', error: error.message });
   }
 });
@@ -552,7 +553,17 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
 
 app.get('/api/applications', requireRoles(['applicant', 'admin', 'superadmin']), async (req, res) => {
   try {
-    const filter = req.user.role === 'applicant' ? { applicantId: req.user.id } : {};
+    const emailPattern = String(req.user.email || '')
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const filter = req.user.role === 'applicant'
+      ? {
+        $or: [
+          { applicantId: req.user.id },
+          { applicantEmail: { $regex: `^${emailPattern}$`, $options: 'i' } },
+        ],
+      }
+      : {};
     const applications = await Application.find(filter)
       .sort({ createdAt: -1 })
       .lean();

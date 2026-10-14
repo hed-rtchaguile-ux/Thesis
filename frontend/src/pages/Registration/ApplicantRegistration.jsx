@@ -94,7 +94,13 @@ function getApplicantDocumentFields(form, applicant) {
   const fields = []
   const dissolutionMethod = (form[`${applicant}DissolutionMethod`] || '').toLowerCase()
   const civilStatus = (form[`${applicant}CivilStatus`] || '').toLowerCase()
-  const citizenship = (form[`${applicant}Citizenship`] || '').trim()
+  const citizenship = (form[`${applicant}Citizenship`] || '').trim().toLowerCase()
+  const residenceCountry = (form[`${applicant}ResidenceCountry`] || '').trim().toLowerCase()
+  const requiresCourtDecree = ['divorce', 'annulment'].includes(dissolutionMethod)
+    || ['divorced', 'annulled'].includes(civilStatus)
+  const requiresDeathCertificate = civilStatus === 'widowed' || dissolutionMethod === 'death of spouse'
+  const requiresLegalCapacity = (citizenship !== '' && citizenship !== 'filipino')
+    || (residenceCountry !== '' && residenceCountry !== 'philippines')
   const day = Number(form[`${applicant}DobDay`] || 0)
   const month = Number(form[`${applicant}DobMonth`] || 0)
   const year = Number(form[`${applicant}DobYear`] || 0)
@@ -111,21 +117,21 @@ function getApplicantDocumentFields(form, applicant) {
   if (age !== null && (today.getMonth() < birthDate.getMonth()
     || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate()))) age -= 1
 
-  if (dissolutionMethod === 'divorce') {
+  if (requiresCourtDecree) {
     fields.push({
       key: `divorceDecree${applicantLabel}`,
       label: `Court Order / Judicial Decree of Nullity of Marriage (${applicantLabel}) *`,
     })
   }
 
-  if (civilStatus === 'widowed' || dissolutionMethod === 'death of spouse') {
+  if (requiresDeathCertificate) {
     fields.push({
       key: `deathCertificate${applicantLabel}`,
       label: `Death Certificate of Deceased Spouse (${applicantLabel}) *`,
     })
   }
 
-  if (citizenship && citizenship.toLowerCase() !== 'filipino') {
+  if (requiresLegalCapacity) {
     fields.push({
       key: `legalCapacity${applicantLabel}`,
       label: `Certificate of Legal Capacity to Contract Marriage (${applicantLabel}) *`,
@@ -609,6 +615,7 @@ export default function ApplicantRegistration() {
             City list unavailable. <button type="button" onClick={() => void loadCityData(selectedCountry.isoCode)}>Retry</button>
           </span>
         )}
+        <FieldError message={validationErrors[field]} />
         {isCustom && (
           <input
             value={value}
@@ -775,16 +782,19 @@ export default function ApplicantRegistration() {
     if (currentPersonStep === 7) {
       const age = getAgeFromDob(prefix)
       if (age !== null && age >= 18 && age <= 23) {
-        [
+        const requiredAdvisorFields = [
           `${prefix}AdvisorRelationship`,
           `${prefix}AdvisorCitizenship`,
           `${prefix}AdvisorResidenceHouseNo`,
           `${prefix}AdvisorResidenceStreet`,
-          `${prefix}AdvisorResidenceBarangay`,
           `${prefix}AdvisorResidenceCity`,
           `${prefix}AdvisorResidenceProvince`,
           `${prefix}AdvisorResidenceCountry`,
-        ].forEach((field) => {
+        ]
+        if (form[`${prefix}AdvisorResidenceCountry`] === 'Philippines') {
+          requiredAdvisorFields.push(`${prefix}AdvisorResidenceBarangay`)
+        }
+        requiredAdvisorFields.forEach((field) => {
           if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 23.'
         })
       }
@@ -1104,7 +1114,7 @@ export default function ApplicantRegistration() {
         <div key={fieldSuffix}>
           {dropdownOptionKey
             ? renderDropdownField(field, label, dropdownOptionKey)
-            : <div className="field-group"><label htmlFor={field}>{label}</label><input id={field} value={form[field] ?? ''} onChange={(event) => updateField(field, event.target.value)} placeholder={label} /></div>}
+            : <div className="field-group"><label htmlFor={field}>{label}</label><input id={field} value={form[field] ?? ''} onChange={(event) => updateField(field, event.target.value)} placeholder={label} /><FieldError message={validationErrors[field]} /></div>}
         </div>
       )
     }
@@ -1228,6 +1238,7 @@ export default function ApplicantRegistration() {
                   <option value="">Select</option>
                   <option value="Single">Single</option>
                   <option value="Married">Married</option>
+                  <option value="Divorced">Divorced</option>
                   <option value="Widowed">Widowed</option>
                   <option value="Separated">Separated</option>
                 </select>
@@ -1311,11 +1322,16 @@ export default function ApplicantRegistration() {
               <>
                 <div className="field-group single-line-field" style={{ marginTop: '16px' }}>
                   <label>How was the marriage dissolved?</label>
-                  <input
+                  <select
                     value={form[`${person}DissolutionMethod`] ?? ''}
                     onChange={(event) => updateField(`${person}DissolutionMethod`, event.target.value)}
-                    placeholder="Type your answer"
-                  />
+                  >
+                    <option value="">Select</option>
+                    <option value="Death of spouse">Death of spouse</option>
+                    <option value="Divorce">Divorce</option>
+                    <option value="Annulment">Annulment</option>
+                    <option value="Legal separation">Legal separation</option>
+                  </select>
                 </div>
 
                 <div className="form-grid three-col" style={{ marginTop: '12px' }}>
@@ -1413,6 +1429,7 @@ export default function ApplicantRegistration() {
                   onChange={(e) => updateField(`${person}AdvisorRelationship`, e.target.value)}
                   placeholder="Relationship"
                 />
+                <FieldError message={validationErrors[`${person}AdvisorRelationship`]} />
               </div>
 
               {renderDropdownField(`${person}AdvisorCitizenship`, 'Citizenship', 'citizenship', 'single-line-field', { marginTop: '12px' })}

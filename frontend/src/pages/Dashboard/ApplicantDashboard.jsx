@@ -25,6 +25,7 @@ export default function ApplicantDashboard() {
   const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
   const [application, setApplication] = useState({ status: 'No applications', items: 0, appointment: 'None' })
   const [applications, setApplications] = useState([])
+  const [applicationsStatus, setApplicationsStatus] = useState('loading')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedApplication, setSelectedApplication] = useState(null)
   const [isEditingApplication, setIsEditingApplication] = useState(false)
@@ -40,11 +41,12 @@ export default function ApplicantDashboard() {
   useEffect(() => {
     async function loadApplications() {
       const response = await apiFetch('/api/applications')
-      if (!response.ok) return
+      if (!response.ok) throw new Error('Unable to load your application history.')
 
       const fetchedApplications = await response.json()
       const latestApplication = fetchedApplications[0]
       setApplications(fetchedApplications)
+      setApplicationsStatus('ready')
       setApplication({
         status: latestApplication?.status || 'No applications',
         items: fetchedApplications.length,
@@ -53,7 +55,7 @@ export default function ApplicantDashboard() {
     }
 
     const refreshApplications = () => loadApplications().catch(() => {
-      setApplications([])
+      setApplicationsStatus('error')
       setApplication({ status: 'Unable to load', items: 0, appointment: 'None' })
     })
 
@@ -300,9 +302,18 @@ export default function ApplicantDashboard() {
             </article>
           </div>
 
-          {applications.length > 0 && (
-            <div className="application-history">
-              <h3>My Applications</h3>
+          <div className="application-history">
+            <h3>My Applications</h3>
+            {applicationsStatus === 'loading' && <p role="status">Loading your application history...</p>}
+            {applicationsStatus === 'error' && (
+              <p className="application-history-error" role="alert">
+                Unable to refresh your application history. Your previously loaded records are still shown.
+              </p>
+            )}
+            {applicationsStatus === 'ready' && applications.length === 0 && (
+              <p>No application history was found for this account.</p>
+            )}
+            {applications.length > 0 && (
               <div className="application-list">
                 {applications.map((item, index) => {
                   const coupleNames = [item.groomFullName, item.brideFullName].filter(Boolean).join(' & ') || 'Couple'
@@ -330,8 +341,8 @@ export default function ApplicantDashboard() {
                   )
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="quick-actions">
             <h3>Quick Actions</h3>
