@@ -275,7 +275,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json()); // Parses incoming JSON data
+app.use(express.json({ limit: '20mb' }));
 
 app.get('/api/status', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -806,6 +806,16 @@ app.put('/api/applications/:id/notifications/:notificationKey/read', requireRole
   } catch (error) {
     res.status(400).json({ message: 'Unable to mark notification as read.', error: error.message });
   }
+});
+
+app.use((error, req, res, next) => {
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({
+      message: 'Uploaded documents are too large. Reduce their file sizes and try again.',
+    });
+  }
+
+  next(error);
 });
 
 // Launch server

@@ -95,11 +95,15 @@ function personAddress(application, person, prefix = '') {
   ]);
 }
 
-function fillPerson(sheet, application, person, side) {
+function fillPerson(sheet, application, person, side, formValueCells) {
   const cells = side === 'groom'
-    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A47', fatherMiddle: 'F47', fatherLast: 'J47', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A52', motherMiddle: 'F52', motherLast: 'J52', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A60', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
-    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U47', fatherMiddle: 'Z47', fatherLast: 'AE47', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U52', motherMiddle: 'Z52', motherLast: 'AE52', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U60', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
-  const set = (key, value) => { sheet.getCell(cells[key]).value = value || ''; };
+    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A48', fatherMiddle: 'F48', fatherLast: 'J48', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A53', motherMiddle: 'F53', motherLast: 'J53', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A58', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
+    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U48', fatherMiddle: 'Z48', fatherLast: 'AE48', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U53', motherMiddle: 'Z53', motherLast: 'AE53', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U58', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
+  const set = (key, value) => {
+    const cell = sheet.getCell(cells[key]);
+    cell.value = value || '';
+    formValueCells.add(cell.address);
+  };
   const name = personName(application, person);
   const dob = personDateParts(application, person);
   const fatherName = personName({
@@ -151,6 +155,10 @@ function fillPerson(sheet, application, person, side) {
   set('fatherFirst', fatherName.first);
   set('fatherMiddle', fatherName.middle);
   set('fatherLast', fatherName.last);
+  ['fatherFirst', 'fatherMiddle', 'fatherLast', 'motherFirst', 'motherMiddle', 'motherLast'].forEach((key) => {
+    const cell = sheet.getCell(cells[key]);
+    cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
+  });
   set('fatherCitizenship', application[`${person}FatherCitizenship`]);
   set('fatherResidence', personAddress(application, person, 'Father'));
   set('motherFirst', motherName.first);
@@ -165,6 +173,7 @@ function fillPerson(sheet, application, person, side) {
 }
 
 function fillTemplate(sheet, application) {
+  const formValueCells = new Set();
   const groomMaritalHistoryCell = sheet.getCell('A38');
   groomMaritalHistoryCell.alignment = {
     ...groomMaritalHistoryCell.alignment,
@@ -172,8 +181,9 @@ function fillTemplate(sheet, application) {
     vertical: 'middle',
     wrapText: true,
   };
-  fillPerson(sheet, application, 'groom', 'groom');
-  fillPerson(sheet, application, 'bride', 'bride');
+  fillPerson(sheet, application, 'groom', 'groom', formValueCells);
+  fillPerson(sheet, application, 'bride', 'bride', formValueCells);
+  return formValueCells;
 }
 
 async function buildPrintFormPdf(application) {
@@ -265,19 +275,20 @@ function borderValue(side) {
   return `${widths[side.style] || '1px'} ${lineStyle} ${colorValue(side.color, '#333333')}`;
 }
 
-function cellCss(cell, isTemplateText, mergedBorders = {}) {
+function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = false) {
   const style = cell.style || {};
   const font = style.font || {};
   const alignment = style.alignment || {};
   const fill = style.fill || {};
+  const fontSize = font.size || 8;
   const css = {
-    'text-align': alignment.horizontal || 'left',
+    'text-align': isCenterPrompt || alignment.horizontal === 'centerContinuous' ? 'center' : alignment.horizontal || 'left',
     'vertical-align': alignment.vertical === 'center' ? 'middle' : alignment.vertical || 'top',
     'white-space': alignment.wrapText ? 'pre-wrap' : 'nowrap',
     'font-family': `${font.name || 'Arial'}, sans-serif`,
-    'font-size': `${font.size || 8}pt`,
-    'font-weight': font.bold ? '700' : '400',
-    'font-style': font.italic ? 'italic' : 'normal',
+    'font-size': `${isTemplateText ? fontSize : 8}pt`,
+    'font-weight': isTemplateText ? (font.bold ? '700' : '400') : '700',
+    'font-style': isTemplateText && font.italic ? 'italic' : 'normal',
     'text-decoration': font.underline ? 'underline' : 'none',
     color: colorValue(font.color, '#111111'),
     padding: '1px 2px',
@@ -294,11 +305,11 @@ function cellCss(cell, isTemplateText, mergedBorders = {}) {
   return Object.entries(css).map(([key, value]) => `${key}:${escapeHtml(value)}`).join(';');
 }
 
-function mergeLayout(sheet) {
+function mergeLayout(sheet, additionalMerges = []) {
   const starts = new Map();
   const skipped = new Set();
 
-  for (const range of sheet.model.merges) {
+  for (const range of [...sheet.model.merges, ...additionalMerges]) {
     const [start, end] = range.split(':');
     const startCell = sheet.getCell(start);
     const endCell = sheet.getCell(end);
@@ -357,8 +368,8 @@ async function buildPrintFormHtml(application) {
     }
   }
 
-  fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
-  const { starts, skipped } = mergeLayout(sheet);
+  const formValueCells = fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
+  const { starts, skipped } = mergeLayout(sheet, ['R32:T32', 'R35:T35', 'R36:T36']);
   const visibleColumns = Array.from({ length: FORM_COLUMNS }, (_, index) => index + 1)
     .filter((column) => !sheet.getColumn(column).hidden);
   const totalWidth = visibleColumns.map((column) => sheet.getColumn(column).width || 8)
@@ -378,7 +389,7 @@ async function buildPrintFormHtml(application) {
       if (skipped.has(cell.address)) continue;
       const span = starts.get(cell.address) || {};
       const valueCell = span.valueSource ? sheet.getCell(span.valueSource) : cell;
-      const isTemplateText = templateTextCells.has(valueCell.address);
+      const isTemplateText = templateTextCells.has(valueCell.address) && !formValueCells.has(valueCell.address);
       const isCenterPrompt = isTemplateText && valueCell.col >= 18 && valueCell.col <= 20 && valueCell.row >= 23 && valueCell.row <= 64;
       const text = valueCell.value === null || valueCell.value === undefined ? '' : valueCell.text || String(valueCell.value);
       const rowSpan = span.rowSpan ? ` rowspan="${span.rowSpan}"` : '';
@@ -387,7 +398,7 @@ async function buildPrintFormHtml(application) {
         isTemplateText ? 'template-text' : 'form-value',
         isCenterPrompt ? 'center-prompt' : '',
       ].filter(Boolean).join(' ');
-      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders)}">${escapeHtml(text)}</td>`);
+      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, isCenterPrompt)}">${escapeHtml(text)}</td>`);
     }
     const height = ((row.height || 12.75) * 96) / 72;
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
