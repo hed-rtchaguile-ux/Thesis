@@ -95,12 +95,10 @@ function getApplicantDocumentFields(form, applicant) {
   const dissolutionMethod = (form[`${applicant}DissolutionMethod`] || '').toLowerCase()
   const civilStatus = (form[`${applicant}CivilStatus`] || '').toLowerCase()
   const citizenship = (form[`${applicant}Citizenship`] || '').trim().toLowerCase()
-  const residenceCountry = (form[`${applicant}ResidenceCountry`] || '').trim().toLowerCase()
   const requiresCourtDecree = ['divorce', 'annulment'].includes(dissolutionMethod)
     || ['divorced', 'annulled'].includes(civilStatus)
   const requiresDeathCertificate = civilStatus === 'widowed' || dissolutionMethod === 'death of spouse'
-  const requiresLegalCapacity = (citizenship !== '' && citizenship !== 'filipino')
-    || (residenceCountry !== '' && residenceCountry !== 'philippines')
+  const requiresLegalCapacity = citizenship !== '' && citizenship !== 'filipino'
   const day = Number(form[`${applicant}DobDay`] || 0)
   const month = Number(form[`${applicant}DobMonth`] || 0)
   const year = Number(form[`${applicant}DobYear`] || 0)
@@ -138,11 +136,18 @@ function getApplicantDocumentFields(form, applicant) {
     })
   }
 
-  if (age !== null && age >= 18 && age <= 24) {
+  if (age !== null && age >= 18 && age <= 23) {
     fields.push({
       key: `parentalConsent${applicantLabel}`,
       label: `Parental Consent (Photo) (${applicantLabel}) *`,
       accept: 'image/*',
+    })
+  }
+
+  if (age !== null && age >= 24 && age <= 27) {
+    fields.push({
+      key: `parentalAdvice${applicantLabel}`,
+      label: `Parental Advice (${applicantLabel}) *`,
     })
   }
 
@@ -177,7 +182,7 @@ const initialForm = {
   groomBirthPlaceCity: '',
   groomBirthPlaceProvince: '',
   groomBirthPlaceCountry: '',
-  groomGender: 'Female',
+  groomGender: 'Male',
   groomCitizenship: '',
   groomResidenceHouseNo: '',
   groomResidenceStreet: '',
@@ -215,6 +220,7 @@ const initialForm = {
   groomMotherResidenceCity: '',
   groomMotherResidenceProvince: '',
   groomMotherResidenceCountry: '',
+  groomAdvisorName: '',
   groomAdvisorRelationship: '',
   groomAdvisorCitizenship: '',
   groomAdvisorResidenceHouseNo: '',
@@ -248,7 +254,7 @@ const initialForm = {
   brideBirthPlaceCity: '',
   brideBirthPlaceProvince: '',
   brideBirthPlaceCountry: '',
-  brideGender: 'Male',
+  brideGender: 'Female',
   brideCitizenship: '',
   brideResidenceHouseNo: '',
   brideResidenceStreet: '',
@@ -286,6 +292,7 @@ const initialForm = {
   brideMotherResidenceCity: '',
   brideMotherResidenceProvince: '',
   brideMotherResidenceCountry: '',
+  brideAdvisorName: '',
   brideAdvisorRelationship: '',
   brideAdvisorCitizenship: '',
   brideAdvisorResidenceHouseNo: '',
@@ -373,8 +380,20 @@ export default function ApplicantRegistration() {
 
   const currentTitle = stepLabels[step - 1]
   const isPersonInformationStep = step === 1 || step === 2
-  const progressLabel = isPersonInformationStep ? `Step ${personStep} of ${personStepLabels.length}` : `Step ${step} of ${stepLabels.length}`
   const person = step === 1 ? 'groom' : 'bride'
+  const personAge = getAgeFromDob(person)
+  const skipsAdvisorStep = personAge !== null && (personAge < 18 || personAge >= 28)
+  const advisorStepTitle = personAge !== null && personAge >= 18 && personAge <= 23
+    ? 'Person Who Gave Parental Consent'
+    : personAge !== null && personAge >= 24 && personAge <= 27
+      ? 'Person Who Gave Parental Advice'
+      : 'Person Who Gave Consent or Advice'
+  const displayedPersonStep = skipsAdvisorStep && personStep > 7 ? personStep - 1 : personStep
+  const personStepCount = skipsAdvisorStep ? personStepLabels.length - 1 : personStepLabels.length
+  const progressLabel = isPersonInformationStep ? `Step ${displayedPersonStep} of ${personStepCount}` : `Step ${step} of ${stepLabels.length}`
+  const nextPersonStep = personStep === 6 && skipsAdvisorStep ? 8 : personStep + 1
+  const currentPersonStepLabel = personStep === 7 ? advisorStepTitle : personStepLabels[personStep - 1]
+  const nextPersonStepLabel = nextPersonStep === 7 ? advisorStepTitle : personStepLabels[nextPersonStep - 1]
   const groomDocumentFields = getApplicantDocumentFields(form, 'groom')
   const brideDocumentFields = getApplicantDocumentFields(form, 'bride')
   const personDocumentFields = person === 'groom' ? groomDocumentFields : brideDocumentFields
@@ -701,7 +720,7 @@ export default function ApplicantRegistration() {
       }
 
       if (personStep < personStepLabels.length) {
-        setPersonStep((current) => current + 1)
+        setPersonStep(nextPersonStep)
         return
       }
 
@@ -740,7 +759,7 @@ export default function ApplicantRegistration() {
     }
 
     if (isPersonInformationStep && personStep > 1) {
-      setPersonStep((current) => current - 1)
+      setPersonStep((current) => skipsAdvisorStep && current === 8 ? 6 : current - 1)
       return
     }
 
@@ -781,8 +800,9 @@ export default function ApplicantRegistration() {
 
     if (currentPersonStep === 7) {
       const age = getAgeFromDob(prefix)
-      if (age !== null && age >= 18 && age <= 23) {
+      if (age !== null && age >= 18 && age <= 27) {
         const requiredAdvisorFields = [
+          `${prefix}AdvisorName`,
           `${prefix}AdvisorRelationship`,
           `${prefix}AdvisorCitizenship`,
           `${prefix}AdvisorResidenceHouseNo`,
@@ -795,7 +815,7 @@ export default function ApplicantRegistration() {
           requiredAdvisorFields.push(`${prefix}AdvisorResidenceBarangay`)
         }
         requiredAdvisorFields.forEach((field) => {
-          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 23.'
+          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 27.'
         })
       }
     }
@@ -871,10 +891,15 @@ export default function ApplicantRegistration() {
         }),
       })
 
-      if (!response.ok) throw new Error('Unable to submit application.')
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        throw new Error(result?.message || 'Unable to submit application.')
+      }
       navigate('/applicant/dashboard')
     } catch (error) {
-      setSubmitError(error.message)
+      setSubmitError(error instanceof TypeError
+        ? 'Unable to reach the server. Check your connection and try again.'
+        : error.message)
       setIsSubmitting(false)
     }
   }
@@ -925,7 +950,7 @@ export default function ApplicantRegistration() {
       DobDay: isBride ? '24' : '15',
       DobMonth: isBride ? '06' : '04',
       DobYear: isBride ? '1997' : '1994',
-      Gender: isBride ? 'Male' : 'Female',
+      Gender: isBride ? 'Female' : 'Male',
       Citizenship: 'Filipino',
       ResidenceHouseNo: isBride ? '15' : '120',
       ResidenceStreet: isBride ? 'Lapu-Lapu Street' : 'Mabini Street',
@@ -946,6 +971,7 @@ export default function ApplicantRegistration() {
       MotherResidenceHouseNo: isBride ? '18' : '123',
       MotherResidenceStreet: isBride ? 'Bahayang Street' : 'Mabini Street',
       AdvisorRelationship: 'Godfather',
+      AdvisorName: isBride ? 'Mateo Santos' : 'Carlos Cruz',
       AdvisorCitizenship: 'Filipino',
       AdvisorResidenceHouseNo: '9',
       AdvisorResidenceStreet: 'P. Burgos Street',
@@ -978,7 +1004,7 @@ export default function ApplicantRegistration() {
           }
         }
       })
-      nextForm[`${targetPrefix}Gender`] = isBride ? 'Male' : 'Female'
+      nextForm[`${targetPrefix}Gender`] = isBride ? 'Female' : 'Male'
 
       const firstName = (nextForm[`${targetPrefix}FirstName`] || '').trim()
       const lastName = (nextForm[`${targetPrefix}LastName`] || '').trim()
@@ -1420,7 +1446,17 @@ export default function ApplicantRegistration() {
 
           {personStep === 7 && <>
             <div className="formal-box">
-              <div className="formal-box-title">Person Who Gave Advice</div>
+              <div className="formal-box-title">{advisorStepTitle}</div>
+
+              <div className="field-group single-line-field">
+                <label>Name</label>
+                <input
+                  value={form[`${person}AdvisorName`] ?? ''}
+                  onChange={(e) => updateField(`${person}AdvisorName`, e.target.value)}
+                  placeholder="Full name of parent"
+                />
+                <FieldError message={validationErrors[`${person}AdvisorName`]} />
+              </div>
 
               <div className="field-group single-line-field">
                 <label>Relationship</label>
@@ -1455,7 +1491,7 @@ export default function ApplicantRegistration() {
             {personStep === 8 && (
               <>
                 <p className="section-subtitle">
-                  Upload this applicant’s documents. Applicants age 18 to 24 must also attach a photo of their parental consent.
+                  Upload this applicant’s documents. Applicants age 18 to 23 must attach a photo of parental consent. Applicants age 24 to 27 must attach parental advice. Applicants age 28 and older do not need parent-related documents.
                 </p>
                 {renderDocumentUpload(personDocumentFields, `${person === 'groom' ? 'Groom' : 'Bride'} Documents`)}
               </>
@@ -1603,6 +1639,7 @@ export default function ApplicantRegistration() {
         form[`${person}MotherMaidenLastName`],
       ].filter(Boolean).join(' ')
       const advisorInfo = [
+        form[`${person}AdvisorName`],
         form[`${person}AdvisorRelationship`],
         form[`${person}AdvisorCitizenship`],
         form[`${person}AdvisorResidenceCity`],
@@ -1625,7 +1662,7 @@ export default function ApplicantRegistration() {
             {renderReviewField('Email', form[`${person}Email`])}
             {renderReviewField('Father', fatherName)}
             {renderReviewField('Mother', motherName)}
-            {renderReviewField('Advisor', advisorInfo)}
+            {renderReviewField('Person who gave consent/advice', advisorInfo)}
             {renderReviewField('Previously married', form[`${person}PreviouslyMarried`])}
           </div>
         </section>
@@ -1739,7 +1776,7 @@ export default function ApplicantRegistration() {
               </>
             ) : (
               <>
-                <h3>{step === 1 ? 'Groom' : 'Bride'} - {personStepLabels[personStep - 1]}</h3>
+                <h3>{step === 1 ? 'Groom' : 'Bride'} - {currentPersonStepLabel}</h3>
                 {renderGroomBrideForm()}
               </>
             )}
@@ -1761,7 +1798,7 @@ export default function ApplicantRegistration() {
                     ? 'Review Application'
                     : isPersonInformationStep
                       ? personStep < personStepLabels.length
-                        ? `Next: ${personStepLabels[personStep]} →`
+                        ? `Next: ${nextPersonStepLabel} →`
                         : `Next: ${stepLabels[step]} →`
                       : step === 3
                         ? 'Next: Appointment →'
