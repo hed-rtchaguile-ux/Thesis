@@ -70,8 +70,8 @@ function personAddress(application, person, prefix = '') {
 
 function fillPerson(sheet, application, person, side, formValueFields) {
   const cells = side === 'groom'
-    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A47', fatherMiddle: 'F47', fatherLast: 'J47', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A52', motherMiddle: 'F52', motherLast: 'J52', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A60', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
-    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U47', fatherMiddle: 'Z47', fatherLast: 'AE47', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U52', motherMiddle: 'Z52', motherLast: 'AE52', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U60', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
+    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birthCity: 'A30', birthProvince: 'F30', birthCountry: 'J30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A47', fatherMiddle: 'F47', fatherLast: 'J47', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A52', motherMiddle: 'F52', motherLast: 'J52', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A60', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
+    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birthCity: 'U30', birthProvince: 'Z30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U47', fatherMiddle: 'Z47', fatherLast: 'AE47', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U52', motherMiddle: 'Z52', motherLast: 'AE52', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U60', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
   const set = (key, value) => {
     const cell = sheet.getCell(cells[key]);
     cell.value = value || '';
@@ -108,7 +108,8 @@ function fillPerson(sheet, application, person, side, formValueFields) {
   set('month', dob.month);
   set('year', dob.year);
   set('age', application[`${person}Age`]);
-  set('birth', join([application[`${person}BirthPlaceCity`], application[`${person}BirthPlaceProvince`]]));
+  set('birthCity', application[`${person}BirthPlaceCity`]);
+  set('birthProvince', application[`${person}BirthPlaceProvince`]);
   set('birthCountry', application[`${person}BirthPlaceCountry`]);
   set('sex', application[`${person}Gender`]);
   set('citizenship', application[`${person}Citizenship`]);
@@ -180,15 +181,15 @@ function valueFontSize(field, text) {
   const longFields = new Set([
     'residence', 'fatherResidence', 'motherResidence', 'advisorResidence',
   ]);
-  const baseSize = shortFields.has(field) || longFields.has(field) || field === 'birth' || field === 'dissolutionPlace'
+  const baseSize = shortFields.has(field) || longFields.has(field) || field.startsWith('birth') || field === 'dissolutionPlace'
     ? 9
     : 10.5;
-  const maxLength = shortFields.has(field) ? 13 : longFields.has(field) ? 46 : field === 'birth' ? 27 : field === 'dissolutionPlace' ? 32 : 28;
+  const maxLength = shortFields.has(field) ? 13 : longFields.has(field) ? 46 : field.startsWith('birth') ? 17 : field === 'dissolutionPlace' ? 32 : 28;
   const excessCharacters = Math.max(0, String(text || '').length - maxLength);
   return Math.max(7, baseSize - excessCharacters * 0.15);
 }
 
-function cellCss(cell, isTemplateText, mergedBorders = {}, valueField = '', valueText = '') {
+function cellCss(cell, isTemplateText, mergedBorders = {}, valueField = '', valueText = '', pairedValueFontSizes = new Map()) {
   const style = cell.style || {};
   const font = style.font || {};
   const alignment = style.alignment || {};
@@ -225,7 +226,7 @@ function cellCss(cell, isTemplateText, mergedBorders = {}, valueField = '', valu
     css['vertical-align'] = 'middle';
     css['white-space'] = 'nowrap';
     css['font-family'] = 'Arial, sans-serif';
-    css['font-size'] = `${valueFontSize(valueField, valueText)}pt`;
+    css['font-size'] = `${pairedValueFontSizes.get(valueField) ?? valueFontSize(valueField, valueText)}pt`;
     css['font-weight'] = '700';
     css['font-style'] = 'normal';
     css.padding = '0 3px';
@@ -284,6 +285,21 @@ async function buildPrintFormHtml(application) {
   const sheet = workbook.getWorksheet('Front');
   if (!sheet) throw new Error('The workbook does not contain its Front form sheet.');
 
+  const swornHeadings = {
+    groom: `${sheet.getCell('E68').text || sheet.getCell('E68').value} ${sheet.getCell('J68').text || sheet.getCell('J68').value}`.trim(),
+    bride: `${sheet.getCell('X68').text || sheet.getCell('X68').value} ${sheet.getCell('AD68').text || sheet.getCell('AD68').value}`.trim(),
+  };
+
+  // Split the combined birthplace entry so each value sits under its own label.
+  for (const range of ['A30:K30', 'L30:N30', 'U30:AD30', 'AE30:AG30']) sheet.unMergeCells(range);
+  for (const range of ['A30:E30', 'F30:I30', 'J30:N30', 'U30:Y30', 'Z30:AD30', 'AE30:AG30']) sheet.mergeCells(range);
+
+  // The template includes this declaration only on the bride's side.
+  // Mirror it into the corresponding groom cell so both sides read alike.
+  const groomApplicationPrompt = sheet.getCell('F17');
+  groomApplicationPrompt.value = sheet.getCell('X17').value;
+  groomApplicationPrompt.alignment = { ...sheet.getCell('X17').alignment };
+
   sheet.getCell('P28').value = null;
 
   const templateTextCells = new Set();
@@ -295,7 +311,20 @@ async function buildPrintFormHtml(application) {
   }
 
   const formValueFields = fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
+  const pairedValueFontSizes = new Map();
+  for (const [address, field] of formValueFields) {
+    const text = sheet.getCell(address).text || '';
+    const candidateSize = valueFontSize(field, text);
+    pairedValueFontSizes.set(field, Math.min(pairedValueFontSizes.get(field) ?? candidateSize, candidateSize));
+  }
   const { starts, skipped } = mergeLayout(sheet);
+  const footerTextCells = new Set(['C69', 'M69', 'I70', 'A71', 'V71', 'A72', 'V72', 'A73', 'V73', 'X69', 'AG69', 'AC70']);
+  const footerCenteredCells = new Set(['C69', 'X69', 'I70', 'AC70']);
+  const footerRightAlignedCells = new Set(['M69', 'AG69']);
+  const footerUnderlineCells = new Set([
+    'A69', 'D69', 'J69', 'V69', 'Y69', 'AD69',
+    'A70', 'V70', 'J71', 'AE71', 'D72', 'Y72', 'C73', 'W73',
+  ]);
   const visibleColumns = Array.from({ length: FORM_COLUMNS }, (_, index) => index + 1)
     .filter((column) => !sheet.getColumn(column).hidden);
   const totalWidth = visibleColumns.map((column) => sheet.getColumn(column).width || 8)
@@ -309,9 +338,18 @@ async function buildPrintFormHtml(application) {
     const row = sheet.getRow(rowNumber);
     const cells = [];
     for (let column = 1; column <= FORM_COLUMNS; column += 1) {
+      if (rowNumber === 68 && column > 1 && column <= 14) continue;
+      if (rowNumber === 68 && column > 21) continue;
       if (sheet.getColumn(column).hidden) continue;
       const cell = sheet.getCell(rowNumber, column);
       if (skipped.has(cell.address)) continue;
+      if (rowNumber === 68 && (column === 1 || column === 21)) {
+        const heading = column === 1 ? swornHeadings.groom : swornHeadings.bride;
+        const headingSpan = column === 1 ? 14 : 13;
+        const headingSide = column === 1 ? 'sworn-heading-groom' : 'sworn-heading-bride';
+        cells.push(`<td colspan="${headingSpan}" class="sworn-heading ${headingSide}"><strong>SUBSCRIBED AND SWORN</strong> <em>${escapeHtml(heading.replace(/^SUBSCRIBED AND SWORN\s*/i, '').trim())}</em></td>`);
+        continue;
+      }
       const span = starts.get(cell.address) || {};
       const valueCell = span.valueSource ? sheet.getCell(span.valueSource) : cell;
       const valueField = formValueFields.get(valueCell.address) || '';
@@ -324,8 +362,12 @@ async function buildPrintFormHtml(application) {
         isTemplateText ? 'template-text' : 'form-value',
         valueField ? `value-${valueField}` : '',
         isCenterPrompt ? 'center-prompt' : '',
+        footerTextCells.has(cell.address) ? 'footer-text' : '',
+        footerCenteredCells.has(cell.address) ? 'footer-centered' : '',
+        footerRightAlignedCells.has(cell.address) ? 'footer-right-aligned' : '',
+        footerUnderlineCells.has(cell.address) ? 'footer-underline' : '',
       ].filter(Boolean).join(' ');
-      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, valueField, text)}">${escapeHtml(text)}</td>`);
+      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, valueField, text, pairedValueFontSizes)}">${escapeHtml(text)}</td>`);
     }
     const height = ((row.height || 12.75) * 96) / 72;
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
@@ -364,6 +406,14 @@ async function buildPrintFormHtml(application) {
     .excel-form-table td { box-sizing: border-box; }
     .excel-form-table td.form-value { line-height: 1.05; }
     .excel-form-table td.center-prompt { text-align: center !important; }
+    .excel-form-table td.sworn-heading { padding: 0; text-align: center; vertical-align: middle; white-space: nowrap; font-family: Arial, sans-serif; font-size: 12pt; line-height: 1; }
+    .excel-form-table td.sworn-heading-groom { border-left: 1px solid #111; }
+    .excel-form-table td.sworn-heading-bride { border-right: 1px solid #111; }
+    .excel-form-table td.sworn-heading em { font-weight: 400; }
+    .excel-form-table td.footer-text { font-size: 9pt !important; }
+    .excel-form-table td.footer-centered { text-align: center !important; }
+    .excel-form-table td.footer-right-aligned { text-align: right !important; }
+    .excel-form-table td.footer-underline { border-bottom: 1px solid #111 !important; }
     @media screen {
       body { padding: 24px; background: #e9e9e9; }
       .form-page { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
