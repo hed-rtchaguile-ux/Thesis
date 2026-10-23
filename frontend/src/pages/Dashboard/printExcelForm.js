@@ -12,7 +12,10 @@ export async function printExcelForm(applicationId) {
 
   try {
     const response = await apiFetch(`/api/applications/${applicationId}/print`)
-    if (!response.ok) throw new Error('Unable to prepare the application form for printing.')
+    if (!response.ok) {
+      const result = await response.json().catch(() => null)
+      throw new Error(result?.message || result?.error || `Unable to prepare the application form for printing (${response.status}).`)
+    }
 
     const html = await response.text()
     const printOnLoad = '<script>window.addEventListener("load", () => { window.focus(); window.print(); }, { once: true });</script>'

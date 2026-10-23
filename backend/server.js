@@ -518,12 +518,10 @@ app.get('/api/applications/:id', requireRoles(['applicant', 'admin', 'superadmin
 
 app.get('/api/applications/:id/print', requireRoles(['applicant', 'admin', 'superadmin']), async (req, res) => {
   try {
-    const filter = req.user.role === 'applicant'
-      ? { _id: req.params.id, applicantEmail: req.user.email }
-      : { _id: req.params.id };
-    const application = await Application.findOne(filter).lean();
+    const application = await Application.findById(req.params.id).lean();
 
-    if (!application) {
+    if (!application || (req.user.role === 'applicant'
+      && String(application.applicantEmail || '').trim().toLowerCase() !== req.user.email.toLowerCase())) {
       return res.status(404).json({ message: 'Application not found.' });
     }
 
