@@ -68,14 +68,14 @@ function personAddress(application, person, prefix = '') {
   ]);
 }
 
-function fillPerson(sheet, application, person, side, formValueCells) {
+function fillPerson(sheet, application, person, side, formValueFields) {
   const cells = side === 'groom'
     ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A47', fatherMiddle: 'F47', fatherLast: 'J47', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A52', motherMiddle: 'F52', motherLast: 'J52', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A60', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
     : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U47', fatherMiddle: 'Z47', fatherLast: 'AE47', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U52', motherMiddle: 'Z52', motherLast: 'AE52', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U60', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
   const set = (key, value) => {
     const cell = sheet.getCell(cells[key]);
     cell.value = value || '';
-    if (value !== undefined && value !== null && value !== '') formValueCells.add(cell.address);
+    formValueFields.set(cell.address, key);
   };
   const name = personName(application, person);
   const dob = personDateParts(application, person);
@@ -142,10 +142,10 @@ function fillPerson(sheet, application, person, side, formValueCells) {
 }
 
 function fillTemplate(sheet, application) {
-  const formValueCells = new Set();
-  fillPerson(sheet, application, 'groom', 'groom', formValueCells);
-  fillPerson(sheet, application, 'bride', 'bride', formValueCells);
-  return formValueCells;
+  const formValueFields = new Map();
+  fillPerson(sheet, application, 'groom', 'groom', formValueFields);
+  fillPerson(sheet, application, 'bride', 'bride', formValueFields);
+  return formValueFields;
 }
 
 function escapeHtml(value) {
@@ -172,13 +172,34 @@ function borderValue(side) {
   return `${widths[side.style] || '1px'} ${lineStyle} ${colorValue(side.color, '#333333')}`;
 }
 
-function cellCss(cell, isTemplateText, mergedBorders = {}) {
+function valueFontSize(field, text) {
+  const shortFields = new Set([
+    'fatherFirst', 'fatherMiddle', 'fatherLast',
+    'motherFirst', 'motherMiddle', 'motherLast',
+  ]);
+  const longFields = new Set([
+    'residence', 'fatherResidence', 'motherResidence', 'advisorResidence',
+  ]);
+  const baseSize = shortFields.has(field) || longFields.has(field) || field === 'birth' || field === 'dissolutionPlace'
+    ? 9
+    : 10.5;
+  const maxLength = shortFields.has(field) ? 13 : longFields.has(field) ? 46 : field === 'birth' ? 27 : field === 'dissolutionPlace' ? 32 : 28;
+  const excessCharacters = Math.max(0, String(text || '').length - maxLength);
+  return Math.max(7, baseSize - excessCharacters * 0.15);
+}
+
+function cellCss(cell, isTemplateText, mergedBorders = {}, valueField = '', valueText = '') {
   const style = cell.style || {};
   const font = style.font || {};
   const alignment = style.alignment || {};
   const fill = style.fill || {};
+  const horizontalAlignment = alignment.horizontal === 'centerContinuous'
+    ? 'center'
+    : alignment.horizontal === 'distributed'
+      ? 'justify'
+      : alignment.horizontal || 'left';
   const css = {
-    'text-align': alignment.horizontal || 'left',
+    'text-align': horizontalAlignment,
     'vertical-align': alignment.vertical === 'center' ? 'middle' : alignment.vertical || 'top',
     'white-space': alignment.wrapText ? 'pre-wrap' : 'nowrap',
     'font-family': `${font.name || 'Arial'}, sans-serif`,
@@ -198,6 +219,19 @@ function cellCss(cell, isTemplateText, mergedBorders = {}) {
     if (border) css[`border-${side}`] = border;
   }
   if (alignment.indent) css['padding-left'] = `${2 + alignment.indent * 8}px`;
+
+  if (valueField) {
+    css['text-align'] = ['first', 'middle', 'last'].includes(valueField) ? 'left' : 'center';
+    css['vertical-align'] = 'middle';
+    css['white-space'] = 'nowrap';
+    css['font-family'] = 'Arial, sans-serif';
+    css['font-size'] = `${valueFontSize(valueField, valueText)}pt`;
+    css['font-weight'] = '700';
+    css['font-style'] = 'normal';
+    css.padding = '0 3px';
+    css.overflow = 'hidden';
+  }
+
   return Object.entries(css).map(([key, value]) => `${key}:${escapeHtml(value)}`).join(';');
 }
 
@@ -260,7 +294,7 @@ async function buildPrintFormHtml(application) {
     }
   }
 
-  const formValueCells = fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
+  const formValueFields = fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
   const { starts, skipped } = mergeLayout(sheet);
   const visibleColumns = Array.from({ length: FORM_COLUMNS }, (_, index) => index + 1)
     .filter((column) => !sheet.getColumn(column).hidden);
@@ -280,16 +314,18 @@ async function buildPrintFormHtml(application) {
       if (skipped.has(cell.address)) continue;
       const span = starts.get(cell.address) || {};
       const valueCell = span.valueSource ? sheet.getCell(span.valueSource) : cell;
-      const isTemplateText = templateTextCells.has(valueCell.address) && !formValueCells.has(valueCell.address);
+      const valueField = formValueFields.get(valueCell.address) || '';
+      const isTemplateText = templateTextCells.has(valueCell.address) && !valueField;
       const isCenterPrompt = isTemplateText && valueCell.col >= 18 && valueCell.col <= 20 && valueCell.row >= 23 && valueCell.row <= 64;
       const text = valueCell.value === null || valueCell.value === undefined ? '' : valueCell.text || String(valueCell.value);
       const rowSpan = span.rowSpan ? ` rowspan="${span.rowSpan}"` : '';
       const colSpan = span.colSpan ? ` colspan="${span.colSpan}"` : '';
       const cellClass = [
         isTemplateText ? 'template-text' : 'form-value',
+        valueField ? `value-${valueField}` : '',
         isCenterPrompt ? 'center-prompt' : '',
       ].filter(Boolean).join(' ');
-      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders)}">${escapeHtml(text)}</td>`);
+      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, valueField, text)}">${escapeHtml(text)}</td>`);
     }
     const height = ((row.height || 12.75) * 96) / 72;
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
@@ -326,7 +362,7 @@ async function buildPrintFormHtml(application) {
       transform-origin: top left;
     }
     .excel-form-table td { box-sizing: border-box; }
-    .excel-form-table td.form-value { font-weight: 700 !important; }
+    .excel-form-table td.form-value { line-height: 1.05; }
     .excel-form-table td.center-prompt { text-align: center !important; }
     @media screen {
       body { padding: 24px; background: #e9e9e9; }
