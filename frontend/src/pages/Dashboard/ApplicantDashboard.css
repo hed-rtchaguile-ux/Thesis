@@ -416,14 +416,14 @@
 }
 
 .notification-count {
-  display: inline-flex;
-  min-height: 28px;
+  display: grid;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: 999px;
-  color: #6e7895;
-  background: #f0f2f7;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #a84e4e;
   font-size: 12px;
   font-weight: 700;
 }
@@ -454,18 +454,6 @@
 .applicant-notification:hover {
   border-color: rgba(168, 78, 78, 0.45);
   background: #fffafa;
-}
-
-.applicant-notification.read {
-  border-color: rgba(125, 136, 168, 0.16);
-  color: #6e7895;
-  background: #f8f9fb;
-  cursor: default;
-}
-
-.applicant-notification.read:hover {
-  border-color: rgba(125, 136, 168, 0.16);
-  background: #f8f9fb;
 }
 
 .notification-icon {
@@ -836,52 +824,6 @@
   margin: 0 0 6px;
 }
 
-.admin-document-review-row h5,
-.admin-submitted-document h5 {
-  margin: 0 0 8px;
-  color: #2d3550;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.admin-submitted-document {
-  padding: 10px 0;
-  border-top: 1px solid rgba(125, 136, 168, 0.12);
-}
-
-.document-preview-image-link {
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-}
-
-.document-preview-image {
-  display: block;
-  max-width: min(100%, 520px);
-  max-height: 420px;
-  border: 1px solid rgba(125, 136, 168, 0.2);
-  border-radius: 4px;
-  background: #fff;
-  object-fit: contain;
-  object-position: left top;
-}
-
-.document-preview-pdf object {
-  display: block;
-  width: min(100%, 620px);
-  height: 360px;
-  border: 1px solid rgba(125, 136, 168, 0.2);
-  background: #fff;
-}
-
-.document-preview-pdf a,
-.document-preview-filename,
-.document-preview-unavailable {
-  color: #697795;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
 .document-review-status {
   display: inline-block;
   margin-bottom: 7px;
@@ -1087,47 +1029,6 @@
   border-color: #d7bcc8;
   color: #7e526b;
   background: #f9f0f5;
-}
-
-.license-release-control {
-  display: grid;
-  grid-template-columns: minmax(145px, 1fr) auto;
-  align-items: end;
-  gap: 6px;
-  min-width: min(100%, 310px);
-}
-
-.license-release-control label {
-  display: grid;
-  gap: 4px;
-  color: #53689f;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.license-release-control input {
-  min-height: 34px;
-  box-sizing: border-box;
-  padding: 6px 8px;
-  border: 1px solid rgba(125, 136, 168, 0.3);
-  border-radius: 5px;
-  color: #2d3550;
-  background: #fff;
-  font: inherit;
-  font-size: 11px;
-}
-
-.license-release-control small {
-  grid-column: 1 / -1;
-  font-size: 10px;
-}
-
-.license-release-error {
-  color: #9b4a4a;
-}
-
-.license-release-success {
-  color: #39704b;
 }
 
 .admin-verify-button:disabled,
@@ -1739,11 +1640,6 @@
 
   .applicant-notifications {
     padding: 14px;
-  }
-
-  .applicant-notifications-heading {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .applicant-notification {

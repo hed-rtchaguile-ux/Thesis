@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth'
+import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import { ReportCards } from './AdminTools'
@@ -33,7 +33,7 @@ export default function SuperAdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    fetch('/api/applications')
+    apiFetch('/api/applications')
       .then((response) => {
         if (!response.ok) throw new Error('Unable to load applications.')
         return response.json()
@@ -46,7 +46,7 @@ export default function SuperAdminDashboard() {
     setUpdatingId(applicationId)
 
     try {
-      const response = await fetch(`/api/applications/${applicationId}/status`, {
+      const response = await apiFetch(`/api/applications/${applicationId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -76,7 +76,7 @@ export default function SuperAdminDashboard() {
   async function updateDocumentReview(applicationId, documentKey, reviewStatus, reviewNote = '') {
     setUpdatingDocumentKey(documentKey)
     try {
-      const response = await fetch(`/api/applications/${applicationId}/documents/${documentKey}/review`, {
+      const response = await apiFetch(`/api/applications/${applicationId}/documents/${documentKey}/review`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reviewStatus, reviewNote }),

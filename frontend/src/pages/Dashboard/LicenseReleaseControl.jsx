@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { apiFetch } from '../auth'
 
 export default function LicenseReleaseControl({ application, onSaved }) {
   const [releaseDate, setReleaseDate] = useState(application.licenseReleaseDate || '')
@@ -11,7 +12,7 @@ export default function LicenseReleaseControl({ application, onSaved }) {
     setMessage('')
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/applications/${application._id}/license-release-date`, {
+      const response = await apiFetch(`/api/applications/${application._id}/license-release-date`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ releaseDate }),

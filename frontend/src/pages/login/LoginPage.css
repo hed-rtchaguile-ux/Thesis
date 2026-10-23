@@ -227,13 +227,6 @@
   font-size: 12px;
 }
 
-.signup-link {
-  margin-top: 18px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-}
-
 .recovery-note {
   margin: 16px 0 0;
   padding: 12px;
@@ -243,6 +236,13 @@
   color: #495d4c;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.signup-link {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .demo-access {

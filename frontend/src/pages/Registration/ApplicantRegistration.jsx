@@ -1,21 +1,173 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getAllMunicipalities, getAllProvinces, getBarangaysByMunicipality, getMunicipalitiesByProvince } from '@aivangogh/ph-address'
 import { apiFetch, useAuth } from '../auth'
-import LocationFields from './LocationFields'
 import './ApplicantRegistration.css'
 
-const stepLabels = ['Groom Info', 'Bride Info', 'Legal Docs', 'Appointment', 'Payment', 'Review']
-const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marital history', 'Father details', 'Mother details', 'Person who gave advice']
+const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
+const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marital history', 'Father details', 'Mother details', 'Person who gave advice', 'Documents']
+const appointmentTimeOptions = [
+  { value: '09:00', label: '9:00 AM' },
+  { value: '10:00', label: '10:00 AM' },
+  { value: '11:00', label: '11:00 AM' },
+  { value: '13:00', label: '1:00 PM' },
+  { value: '14:00', label: '2:00 PM' },
+  { value: '15:00', label: '3:00 PM' },
+  { value: '16:00', label: '4:00 PM' },
+]
 
-const documentFields = [
-  { key: 'birthCertificateGroom', label: '1. Birth Certificate (Groom) *' },
-  { key: 'birthCertificateBride', label: '2. Birth Certificate (Bride) *' },
-  { key: 'certificateOfNoMarriage', label: '3. Certificate of No Marriage (CENOMAR) *' },
-  { key: 'validIdGroom', label: '4. Valid ID (Groom) *' },
-  { key: 'validIdBride', label: '5. Valid ID (Bride) *' },
-  { key: 'psaMarriageLicense', label: '6. PSA Marriage License (if applicable)' },
-  { key: 'barangayClearance', label: '7. Barangay Clearance / Residency *' },
-  { key: 'additionalRequirement', label: '8. Additional Requirement / Affidavit' },
+function formatAppointmentTime(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  if (!match) return value
+
+  const hour = Number(match[1])
+  const period = hour >= 12 ? 'PM' : 'AM'
+  const displayHour = hour % 12 || 12
+  return `${displayHour}:${match[2]} ${period}`
+}
+
+const documentFields = {
+  groom: [
+    { key: 'birthCertificateGroom', label: 'PSA Birth Certificate (Groom) *' },
+    { key: 'certificateOfNoMarriageGroom', label: 'CENOMAR (Groom) *' },
+    { key: 'validIdGroom', label: 'Valid ID (Groom) *' },
+    { key: 'psaMarriageLicenseGroom', label: 'PSA Marriage License (Groom, if applicable)' },
+    { key: 'barangayClearanceGroom', label: 'Barangay Clearance / Residency (Groom) *' },
+    { key: 'additionalRequirementGroom', label: 'Additional Requirement / Affidavit (Groom)' },
+  ],
+  bride: [
+    { key: 'birthCertificateBride', label: 'PSA Birth Certificate (Bride) *' },
+    { key: 'certificateOfNoMarriageBride', label: 'CENOMAR (Bride) *' },
+    { key: 'validIdBride', label: 'Valid ID (Bride) *' },
+    { key: 'psaMarriageLicenseBride', label: 'PSA Marriage License (Bride, if applicable)' },
+    { key: 'barangayClearanceBride', label: 'Barangay Clearance / Residency (Bride) *' },
+    { key: 'additionalRequirementBride', label: 'Additional Requirement / Affidavit (Bride)' },
+  ],
+}
+
+const formDropdownOptions = {
+  citizenship: [
+    'Filipino',
+    'American',
+    'Australian',
+    'British',
+    'Canadian',
+    'Chinese',
+    'French',
+    'German',
+    'Indian',
+    'Indonesian',
+    'Italian',
+    'Japanese',
+    'Korean',
+    'Malaysian',
+    'Singaporean',
+    'Spanish',
+    'Thai',
+    'Vietnamese',
+  ],
+}
+
+const countryMetadataImport = () => import('countrycitystatejson/countries')
+const cityDataImport = () => import('countrycitystatejson/client')
+const philippinesNcrValue = 'Metro Manila'
+const philippinesProvinceOptions = [
+  ...getAllProvinces().map(({ name }) => name),
+  philippinesNcrValue,
+]
+
+function getLocationFields(field) {
+  const locationPart = ['Country', 'Province', 'City', 'Barangay'].find((part) => field.endsWith(part))
+  if (!locationPart) return null
+
+  const locationBase = field.slice(0, -locationPart.length)
+  return {
+    country: `${locationBase}Country`,
+    province: `${locationBase}Province`,
+    city: `${locationBase}City`,
+    barangay: `${locationBase}Barangay`,
+  }
+}
+
+function getApplicantDocumentFields(form, applicant) {
+  const applicantLabel = applicant === 'groom' ? 'Groom' : 'Bride'
+  const fields = []
+  const dissolutionMethod = (form[`${applicant}DissolutionMethod`] || '').toLowerCase()
+  const civilStatus = (form[`${applicant}CivilStatus`] || '').toLowerCase()
+  const citizenship = (form[`${applicant}Citizenship`] || '').trim().toLowerCase()
+  const requiresCourtDecree = ['divorce', 'annulment'].includes(dissolutionMethod)
+    || ['divorced', 'annulled'].includes(civilStatus)
+  const requiresDeathCertificate = civilStatus === 'widowed' || dissolutionMethod === 'death of spouse'
+  const requiresLegalCapacity = citizenship !== '' && citizenship !== 'filipino'
+  const day = Number(form[`${applicant}DobDay`] || 0)
+  const month = Number(form[`${applicant}DobMonth`] || 0)
+  const year = Number(form[`${applicant}DobYear`] || 0)
+  const birthDate = new Date(year, month - 1, day)
+  const today = new Date()
+  const isValidBirthDate = day > 0
+    && month > 0
+    && year > 0
+    && birthDate.getFullYear() === year
+    && birthDate.getMonth() === month - 1
+    && birthDate.getDate() === day
+    && birthDate < today
+  let age = isValidBirthDate ? today.getFullYear() - birthDate.getFullYear() : null
+  if (age !== null && (today.getMonth() < birthDate.getMonth()
+    || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate()))) age -= 1
+
+  if (requiresCourtDecree) {
+    fields.push({
+      key: `divorceDecree${applicantLabel}`,
+      label: `Court Order / Judicial Decree of Nullity of Marriage (${applicantLabel}) *`,
+    })
+  }
+
+  if (requiresDeathCertificate) {
+    fields.push({
+      key: `deathCertificate${applicantLabel}`,
+      label: `Death Certificate of Deceased Spouse (${applicantLabel}) *`,
+    })
+  }
+
+  if (requiresLegalCapacity) {
+    fields.push({
+      key: `legalCapacity${applicantLabel}`,
+      label: `Certificate of Legal Capacity to Contract Marriage (${applicantLabel}) *`,
+    })
+  }
+
+  if (age !== null && age >= 18 && age <= 23) {
+    fields.push({
+      key: `parentalConsent${applicantLabel}`,
+      label: `Parental Consent (Photo) (${applicantLabel}) *`,
+      accept: 'image/*',
+    })
+  }
+
+  if (age !== null && age >= 24 && age <= 27) {
+    fields.push({
+      key: `parentalAdvice${applicantLabel}`,
+      label: `Parental Advice (${applicantLabel}) *`,
+    })
+  }
+
+  return [...documentFields[applicant], ...fields]
+}
+
+const extraInfoFields = [
+  { key: 'age', label: 'Age' },
+  { key: 'placeOfBirth', label: 'Place of Birth' },
+  { key: 'residence', label: 'Residence' },
+  { key: 'religion', label: 'Religion' },
+  { key: 'fatherName', label: "Father's Name" },
+  { key: 'motherMaidenName', label: "Mother's Maiden Name" },
+  { key: 'citizenship', label: 'Citizenship' },
+  { key: 'previouslyMarried', label: 'Previously Married?' },
+  { key: 'dateOfMarriage', label: 'Date of Marriage' },
+  { key: 'occupation', label: 'Occupation' },
+  { key: 'contactNumber', label: 'Contact Number' },
+  { key: 'parentConsent', label: 'Parent Consent' },
+  { key: 'declaration', label: 'Declaration' },
 ]
 
 const initialForm = {
@@ -30,7 +182,7 @@ const initialForm = {
   groomBirthPlaceCity: '',
   groomBirthPlaceProvince: '',
   groomBirthPlaceCountry: '',
-  groomGender: 'Female',
+  groomGender: 'Male',
   groomCitizenship: '',
   groomResidenceHouseNo: '',
   groomResidenceStreet: '',
@@ -68,6 +220,7 @@ const initialForm = {
   groomMotherResidenceCity: '',
   groomMotherResidenceProvince: '',
   groomMotherResidenceCountry: '',
+  groomAdvisorName: '',
   groomAdvisorRelationship: '',
   groomAdvisorCitizenship: '',
   groomAdvisorResidenceHouseNo: '',
@@ -101,7 +254,7 @@ const initialForm = {
   brideBirthPlaceCity: '',
   brideBirthPlaceProvince: '',
   brideBirthPlaceCountry: '',
-  brideGender: 'Male',
+  brideGender: 'Female',
   brideCitizenship: '',
   brideResidenceHouseNo: '',
   brideResidenceStreet: '',
@@ -139,6 +292,7 @@ const initialForm = {
   brideMotherResidenceCity: '',
   brideMotherResidenceProvince: '',
   brideMotherResidenceCountry: '',
+  brideAdvisorName: '',
   brideAdvisorRelationship: '',
   brideAdvisorCitizenship: '',
   brideAdvisorResidenceHouseNo: '',
@@ -171,6 +325,26 @@ const initialForm = {
 const namePattern = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function isValidDate(value) {
+  const normalizedValue = value.replace(/-/g, '/')
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(normalizedValue)
+  if (!match) return false
+
+  const [, month, day, year] = match
+  const date = new Date(Number(year), Number(month) - 1, Number(day))
+  return date.getFullYear() === Number(year)
+    && date.getMonth() === Number(month) - 1
+    && date.getDate() === Number(day)
+    && date < new Date()
+}
+
+function formatDateInput(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
 function getLocalDateInputValue() {
   const now = new Date()
   const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
@@ -190,25 +364,109 @@ export default function ApplicantRegistration() {
   const [step, setStep] = useState(1)
   const [personStep, setPersonStep] = useState(1)
   const [form, setForm] = useState(initialForm)
+  const [customDropdownFields, setCustomDropdownFields] = useState({})
   const [documents, setDocuments] = useState({})
+  const [countryMetadata, setCountryMetadata] = useState(null)
+  const [countryMetadataStatus, setCountryMetadataStatus] = useState('idle')
+  const [cityData, setCityData] = useState({})
+  const [cityDataStatus, setCityDataStatus] = useState({})
   const [validationErrors, setValidationErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const fileInputRefs = useRef({})
+  const countryMetadataPromiseRef = useRef(null)
+  const cityDataModuleRef = useRef(null)
+  const cityDataPromiseRef = useRef({})
 
-  const currentTitle = step === 1 ? 'Groom Info' : step === 2 ? 'Bride Info' : step === 3 ? 'Legal Docs' : step === 4 ? 'Appointment' : step === 5 ? 'Payment' : 'Review'
-  const progressLabel = step <= 2 ? `Step ${personStep} of ${personStepLabels.length}` : `Step ${step} of 6`
+  const currentTitle = stepLabels[step - 1]
+  const isPersonInformationStep = step === 1 || step === 2
   const person = step === 1 ? 'groom' : 'bride'
+  const personAge = getAgeFromDob(person)
+  const skipsAdvisorStep = personAge !== null && (personAge < 18 || personAge >= 28)
+  const advisorStepTitle = personAge !== null && personAge >= 18 && personAge <= 23
+    ? 'Person Who Gave Parental Consent'
+    : personAge !== null && personAge >= 24 && personAge <= 27
+      ? 'Person Who Gave Parental Advice'
+      : 'Person Who Gave Consent or Advice'
+  const displayedPersonStep = skipsAdvisorStep && personStep > 7 ? personStep - 1 : personStep
+  const personStepCount = skipsAdvisorStep ? personStepLabels.length - 1 : personStepLabels.length
+  const progressLabel = isPersonInformationStep ? `Step ${displayedPersonStep} of ${personStepCount}` : `Step ${step} of ${stepLabels.length}`
+  const nextPersonStep = personStep === 6 && skipsAdvisorStep ? 8 : personStep + 1
+  const currentPersonStepLabel = personStep === 7 ? advisorStepTitle : personStepLabels[personStep - 1]
+  const nextPersonStepLabel = nextPersonStep === 7 ? advisorStepTitle : personStepLabels[nextPersonStep - 1]
+  const groomDocumentFields = getApplicantDocumentFields(form, 'groom')
+  const brideDocumentFields = getApplicantDocumentFields(form, 'bride')
+  const personDocumentFields = person === 'groom' ? groomDocumentFields : brideDocumentFields
+  const allDocumentFields = [...groomDocumentFields, ...brideDocumentFields]
 
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
   }
 
+  async function loadCountryMetadata() {
+    if (countryMetadata) return
+
+    if (!countryMetadataPromiseRef.current) {
+      setCountryMetadataStatus('loading')
+      countryMetadataPromiseRef.current = countryMetadataImport()
+    }
+
+    try {
+      const loadedMetadata = await countryMetadataPromiseRef.current
+      setCountryMetadata(loadedMetadata)
+      setCountryMetadataStatus('ready')
+    } catch (error) {
+      countryMetadataPromiseRef.current = null
+      setCountryMetadataStatus('error')
+      console.error('Unable to load country and region data.', error)
+    }
+  }
+
+  async function loadCityData(countryCode) {
+    if (cityData[countryCode]) return
+    if (cityDataPromiseRef.current[countryCode]) return cityDataPromiseRef.current[countryCode]
+
+    setCityDataStatus((currentStatus) => ({ ...currentStatus, [countryCode]: 'loading' }))
+    cityDataPromiseRef.current[countryCode] = (async () => {
+      try {
+        if (!cityDataModuleRef.current) cityDataModuleRef.current = cityDataImport()
+        const cityModule = await cityDataModuleRef.current
+        const countryData = await cityModule.preloadCountry(countryCode)
+        if (!countryData) throw new Error(`No city data is available for country ${countryCode}.`)
+
+        setCityData((currentData) => ({ ...currentData, [countryCode]: countryData }))
+        setCityDataStatus((currentStatus) => ({ ...currentStatus, [countryCode]: 'ready' }))
+      } catch (error) {
+        delete cityDataPromiseRef.current[countryCode]
+        setCityDataStatus((currentStatus) => ({ ...currentStatus, [countryCode]: 'error' }))
+        console.error(`Unable to load city data for ${countryCode}.`, error)
+      }
+    })()
+
+    return cityDataPromiseRef.current[countryCode]
+  }
+
   function updateField(field, value) {
     const previouslyMarriedField = /^(groom|bride)PreviouslyMarried$/.exec(field)
+    const locationFields = getLocationFields(field)
+    const locationPart = ['Country', 'Province', 'City', 'Barangay'].find((part) => field.endsWith(part))
+    const dependentLocationFields = locationFields
+      ? locationPart === 'Country'
+        ? [locationFields.province, locationFields.city, locationFields.barangay]
+        : locationPart === 'Province'
+          ? [locationFields.city, locationFields.barangay]
+          : locationPart === 'City'
+            ? [locationFields.barangay]
+            : []
+      : []
+
     setForm((current) => {
       const nextForm = { ...current, [field]: value }
+      dependentLocationFields.forEach((dependentField) => {
+        nextForm[dependentField] = ''
+      })
+
       if (previouslyMarriedField && value === 'No') {
         const dissolutionFields = ['DissolutionMethod', 'DissolutionPlace', 'DissolutionDate', 'DissolutionCity', 'DissolutionProvince', 'DissolutionCountry', 'DissolutionDay', 'DissolutionMonth', 'DissolutionYear']
         dissolutionFields.forEach((suffix) => {
@@ -217,12 +475,176 @@ export default function ApplicantRegistration() {
       }
       return nextForm
     })
+    if (dependentLocationFields.length > 0) {
+      setCustomDropdownFields((currentFields) => {
+        const nextFields = { ...currentFields }
+        dependentLocationFields.forEach((dependentField) => {
+          delete nextFields[dependentField]
+        })
+        return nextFields
+      })
+    }
     const dateErrorField = /^(groom|bride)Dob(?:Day|Month|Year)$/.exec(field)?.[1]
     setValidationErrors((current) => ({
       ...current,
       [field]: '',
       ...(dateErrorField ? { [`${dateErrorField}Dob`]: '' } : {}),
     }))
+  }
+
+  function renderDropdownField(field, label, optionKey, className = '', style) {
+    const value = form[field] ?? ''
+    const worldCountries = countryMetadata
+      ? countryMetadata.getCountries().map(({ name, shortName }) => ({ name, isoCode: shortName })).sort((a, b) => a.name.localeCompare(b.name))
+      : []
+    const countryNames = worldCountries.map(({ name }) => name)
+    const citizenshipOptions = [...new Set([...formDropdownOptions.citizenship, ...countryNames])].sort()
+    const locationFields = getLocationFields(field)
+    const selectedCountry = locationFields
+      ? worldCountries.find(({ name }) => name === form[locationFields.country])
+      : null
+    const states = selectedCountry
+      ? countryMetadata.getStatesByShort(selectedCountry.isoCode) || []
+      : []
+    const regions = selectedCountry?.isoCode === 'PH'
+      ? philippinesProvinceOptions
+      : selectedCountry?.isoCode === 'US'
+      ? states.filter((stateName) => !/^[A-Z]{2}$/.test(stateName))
+      : states
+    const selectedProvince = locationFields
+      ? regions.find((regionName) => regionName === form[locationFields.province])
+      : null
+    const selectedProvinceCode = selectedCountry?.isoCode === 'PH'
+      ? selectedProvince === philippinesNcrValue
+        ? '1300000000'
+        : getAllProvinces().find(({ name }) => name === selectedProvince)?.psgcCode
+      : null
+    const selectedMunicipality = selectedCountry?.isoCode === 'PH'
+      ? getAllMunicipalities().find(({ name, provinceCode }) => (
+        name === form[locationFields.city] && provinceCode === selectedProvinceCode
+      ))
+      : null
+    const countryCityDataLoaded = selectedCountry?.isoCode === 'PH'
+      ? true
+      : Boolean(cityData[selectedCountry?.isoCode])
+    let options
+
+    if (optionKey === 'country') options = countryNames
+    else if (optionKey === 'citizenship') options = citizenshipOptions
+    else if (optionKey === 'province') options = regions
+    else if (optionKey === 'city') {
+      const countryRegions = cityData[selectedCountry?.isoCode]?.states || {}
+      const cities = selectedCountry?.isoCode === 'PH'
+        ? selectedProvince === philippinesNcrValue
+          ? getAllMunicipalities().filter(({ provinceCode }) => provinceCode === '1300000000')
+          : getMunicipalitiesByProvince(
+            getAllProvinces().find(({ name }) => name === selectedProvince)?.psgcCode || '',
+          )
+        : selectedProvince
+          ? countryRegions[selectedProvince] || []
+          : regions.length === 0
+            ? Object.values(countryRegions).flat()
+            : []
+      options = [...new Set(cities.map((city) => typeof city === 'string' ? city : city.name).filter(Boolean))]
+    } else if (optionKey === 'barangay' && selectedCountry?.isoCode === 'PH') {
+      options = selectedMunicipality
+        ? getBarangaysByMunicipality(selectedMunicipality.psgcCode).map(({ name }) => name)
+        : []
+    } else options = formDropdownOptions[optionKey]
+
+    const isBarangayUnavailable = optionKey === 'barangay'
+      && form[locationFields?.country] !== 'Philippines'
+    if (isBarangayUnavailable) return null
+
+    const isCustomValue = value !== ''
+      && !(optionKey === 'city' && !countryCityDataLoaded)
+      && !((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata)
+      && !options.includes(value)
+    const isCustom = customDropdownFields[field] || isCustomValue
+    const selectedValue = isCustom ? '__other' : value
+    const fieldLabel = optionKey === 'province'
+      ? selectedCountry?.isoCode === 'US' ? 'State' : 'Province / Region'
+      : label
+    const cityRequiresRegion = optionKey === 'city'
+      && selectedCountry
+      && (selectedCountry.isoCode === 'PH' || regions.length > 0)
+      && !selectedProvince
+      && !customDropdownFields[locationFields?.province]
+    const customCountry = locationFields && customDropdownFields[locationFields.country]
+    const isDisabled = (optionKey === 'province' && !selectedCountry && !customCountry)
+      || (optionKey === 'city' && (
+        (!selectedCountry && !customCountry)
+        || (customCountry && !customDropdownFields[locationFields.province])
+        || cityRequiresRegion
+      ))
+      || (optionKey === 'barangay' && selectedCountry?.isoCode === 'PH' && !form[locationFields.city])
+    const selectedCountryCityStatus = selectedCountry ? cityDataStatus[selectedCountry.isoCode] : ''
+
+    return (
+      <div className={`field-group ${className}`.trim()} style={style}>
+        <label htmlFor={field}>{fieldLabel}</label>
+        <select
+          id={field}
+          value={selectedValue}
+          disabled={isDisabled}
+          onChange={(event) => {
+            const selectingOther = event.target.value === '__other'
+            setCustomDropdownFields((currentFields) => ({ ...currentFields, [field]: selectingOther }))
+            updateField(field, selectingOther ? '' : event.target.value)
+            if (optionKey === 'country' && event.target.value !== '__other') {
+              const country = worldCountries.find(({ name }) => name === event.target.value)
+              if (country && country.isoCode !== 'PH') void loadCityData(country.isoCode)
+            }
+          }}
+          onFocus={() => {
+            if ((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata) {
+              void loadCountryMetadata()
+            }
+            if (optionKey === 'city' && selectedCountry && selectedCountry.isoCode !== 'PH') {
+              void loadCityData(selectedCountry.isoCode)
+            }
+          }}
+        >
+          <option value="">
+            {isDisabled
+              ? 'Select the previous location first'
+              : optionKey === 'city' && selectedCountryCityStatus === 'loading'
+                ? 'Loading city list...'
+                : (optionKey === 'country' || optionKey === 'citizenship') && countryMetadataStatus === 'loading'
+                  ? 'Loading options...'
+                : `Select ${fieldLabel.toLowerCase()}`}
+          </option>
+          {((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata && value)
+            && <option value={value}>{value}</option>}
+          {optionKey === 'city' && !countryCityDataLoaded && value && <option value={value}>{value}</option>}
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {optionKey === 'province' && option === philippinesNcrValue ? 'Metro Manila (NCR)' : option}
+            </option>
+          ))}
+          <option value="__other">Other</option>
+        </select>
+        {(optionKey === 'country' || optionKey === 'citizenship') && countryMetadataStatus === 'error' && (
+          <span className="field-error" role="alert">
+            Country list unavailable. <button type="button" onClick={() => void loadCountryMetadata()}>Retry</button>
+          </span>
+        )}
+        {optionKey === 'city' && selectedCountry?.isoCode !== 'PH' && selectedCountryCityStatus === 'error' && (
+          <span className="field-error" role="alert">
+            City list unavailable. <button type="button" onClick={() => void loadCityData(selectedCountry.isoCode)}>Retry</button>
+          </span>
+        )}
+        <FieldError message={validationErrors[field]} />
+        {isCustom && (
+          <input
+            value={value}
+            onChange={(event) => updateField(field, event.target.value)}
+            placeholder={`Enter ${label.toLowerCase()}`}
+            aria-label={`Other ${label.toLowerCase()}`}
+          />
+        )}
+      </div>
+    )
   }
 
   function getFullNameFromParts(prefix, firstValue, lastValue) {
@@ -260,6 +682,13 @@ export default function ApplicantRegistration() {
     return day && month && year ? `${year}-${month}-${day}` : ''
   }
 
+  function getDissolutionDateInputValue(prefix) {
+    const day = String(form[`${prefix}DissolutionDay`] || '').padStart(2, '0')
+    const month = String(form[`${prefix}DissolutionMonth`] || '').padStart(2, '0')
+    const year = String(form[`${prefix}DissolutionYear`] || '')
+    return day && month && year ? `${year}-${month}-${day}` : ''
+  }
+
   function updateDateOfBirth(prefix, value) {
     const [year = '', month = '', day = ''] = value.split('-')
     setForm((currentForm) => ({
@@ -272,8 +701,18 @@ export default function ApplicantRegistration() {
     setValidationErrors((currentErrors) => ({ ...currentErrors, [`${prefix}Dob`]: '' }))
   }
 
+  function updateDissolutionDate(prefix, value) {
+    const [year = '', month = '', day = ''] = value.split('-')
+    setForm((currentForm) => ({
+      ...currentForm,
+      [`${prefix}DissolutionDay`]: day,
+      [`${prefix}DissolutionMonth`]: month,
+      [`${prefix}DissolutionYear`]: year,
+    }))
+  }
+
   function nextStep() {
-    if (step <= 2) {
+    if (isPersonInformationStep) {
       const errors = validatePersonStep(person, personStep)
       if (Object.keys(errors).length > 0) {
         setValidationErrors(errors)
@@ -281,7 +720,7 @@ export default function ApplicantRegistration() {
       }
 
       if (personStep < personStepLabels.length) {
-        setPersonStep((current) => current + 1)
+        setPersonStep(nextPersonStep)
         return
       }
 
@@ -296,22 +735,36 @@ export default function ApplicantRegistration() {
       return
     }
 
-    setStep((current) => Math.min(current + 1, 6))
+    setStep((current) => Math.min(current + 1, 5))
   }
 
   function prevStep() {
-    if (step <= 2) {
+    if (step === 1) {
       if (personStep > 1) {
         setPersonStep((current) => current - 1)
-      } else if (step === 2) {
-        setStep(1)
-        setPersonStep(personStepLabels.length)
       }
       return
     }
 
+    if (isPersonInformationStep && personStep === 1) {
+      setStep((current) => current - 1)
+      setPersonStep(personStepLabels.length)
+      return
+    }
+
+    if (step === 3) {
+      setStep(2)
+      setPersonStep(personStepLabels.length)
+      return
+    }
+
+    if (isPersonInformationStep && personStep > 1) {
+      setPersonStep((current) => skipsAdvisorStep && current === 8 ? 6 : current - 1)
+      return
+    }
+
     setStep((current) => current - 1)
-    setPersonStep(step === 3 ? personStepLabels.length : 1)
+    setPersonStep(1)
   }
 
   function validatePersonStep(prefix, currentPersonStep) {
@@ -347,20 +800,30 @@ export default function ApplicantRegistration() {
 
     if (currentPersonStep === 7) {
       const age = getAgeFromDob(prefix)
-      if (age !== null && age >= 18 && age <= 23) {
-        [
+      if (age !== null && age >= 18 && age <= 27) {
+        const requiredAdvisorFields = [
+          `${prefix}AdvisorName`,
           `${prefix}AdvisorRelationship`,
           `${prefix}AdvisorCitizenship`,
           `${prefix}AdvisorResidenceHouseNo`,
           `${prefix}AdvisorResidenceStreet`,
-          `${prefix}AdvisorResidenceBarangay`,
           `${prefix}AdvisorResidenceCity`,
           `${prefix}AdvisorResidenceProvince`,
           `${prefix}AdvisorResidenceCountry`,
-        ].forEach((field) => {
-          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 23.'
+        ]
+        if (form[`${prefix}AdvisorResidenceCountry`] === 'Philippines') {
+          requiredAdvisorFields.push(`${prefix}AdvisorResidenceBarangay`)
+        }
+        requiredAdvisorFields.forEach((field) => {
+          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 27.'
         })
       }
+    }
+
+    if (currentPersonStep === 8) {
+      personDocumentFields.filter(({ label }) => label.endsWith('*')).forEach(({ key }) => {
+        if (!documents[key]) errors[key] = 'This document is required.'
+      })
     }
 
     return errors
@@ -368,79 +831,24 @@ export default function ApplicantRegistration() {
 
   function validateStep(currentStep) {
     const errors = {}
-    const prefix = currentStep === 1 ? 'groom' : 'bride'
-
-    if (currentStep === 1 || currentStep === 2) {
-      const firstName = (form[`${prefix}FirstName`] || '').trim()
-      const lastName = (form[`${prefix}LastName`] || '').trim()
-      const name = getFullNameFromParts(prefix, firstName, lastName)
-      const mobile = (form[`${prefix}Mobile`] || '').replace(/\D/g, '')
-      const email = (form[`${prefix}Email`] || '').trim()
-      const age = getAgeFromDob(prefix)
-      const dobDay = form[`${prefix}DobDay`]
-      const dobMonth = form[`${prefix}DobMonth`]
-      const dobYear = form[`${prefix}DobYear`]
-
-      if (!name) errors[`${prefix}FullName`] = 'Full name is required.'
-      else if (!namePattern.test(name)) errors[`${prefix}FullName`] = 'Use letters, spaces, apostrophes, or hyphens only.'
-
-      if (!dobDay || !dobMonth || !dobYear) {
-        errors[`${prefix}Dob`] = 'Enter a valid past date.'
-      } else {
-        const birthDate = new Date(Number(dobYear), Number(dobMonth) - 1, Number(dobDay))
-        const tooYoung = birthDate > new Date()
-        if (Number.isNaN(birthDate.getTime()) || tooYoung) {
-          errors[`${prefix}Dob`] = 'Enter a valid past date.'
-        }
-      }
-
-      if (!form[`${prefix}Gender`]) errors[`${prefix}Gender`] = 'Select a gender.'
-      if (!form[`${prefix}CivilStatus`]) errors[`${prefix}CivilStatus`] = 'Select a civil status.'
-      if (!/^09\d{9}$/.test(mobile)) errors[`${prefix}Mobile`] = 'Enter an 11-digit mobile number starting with 09.'
-      if (!emailPattern.test(email)) errors[`${prefix}Email`] = 'Enter a valid email address.'
-
-      if (age !== null && age >= 18 && age <= 23) {
-        const adviserFields = [
-          `${prefix}AdvisorRelationship`,
-          `${prefix}AdvisorCitizenship`,
-          `${prefix}AdvisorResidenceHouseNo`,
-          `${prefix}AdvisorResidenceStreet`,
-          `${prefix}AdvisorResidenceBarangay`,
-          `${prefix}AdvisorResidenceCity`,
-          `${prefix}AdvisorResidenceProvince`,
-          `${prefix}AdvisorResidenceCountry`,
-        ]
-
-        adviserFields.forEach((field) => {
-          if (!form[field] || !String(form[field]).trim()) {
-            errors[field] = 'Required for applicants age 18 to 23.'
-          }
-        })
-      }
-    }
 
     if (currentStep === 3) {
-      documentFields.filter(({ label }) => label.endsWith('*')).forEach(({ key }) => {
-        if (!documents[key]) errors[key] = 'This document is required.'
-      })
-    }
-
-    if (currentStep === 4) {
       const appointmentDate = form.appointmentDate
       const parsedAppointmentDate = new Date(`${appointmentDate}T00:00:00`)
       const today = new Date()
       today.setHours(0, 0, 0, 0)
+
       if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)
         || Number.isNaN(parsedAppointmentDate.getTime())
         || parsedAppointmentDate < today) {
-        errors.appointmentDate = 'Choose today or a future appointment date.'
+        errors.appointmentDate = 'Choose a valid date that is not in the past.'
       }
       if (!/^\d{2}:\d{2}$/.test(form.appointmentTime)) {
         errors.appointmentTime = 'Choose an appointment time.'
       }
     }
 
-    if (currentStep === 5) {
+    if (currentStep === 4) {
       if (!form.paymentMethod) errors.paymentMethod = 'Select a payment method.'
       if (!/^\d+(?:\.\d{1,2})?$/.test(form.paymentAmount.replace(/[^\d.]/g, ''))) {
         errors.paymentAmount = 'Enter a valid amount using numbers only.'
@@ -456,6 +864,10 @@ export default function ApplicantRegistration() {
 
     const submittedForm = {
       ...form,
+      preferredAppointmentDate: form.appointmentDate,
+      preferredAppointmentTime: form.appointmentTime,
+      appointmentDate: 'To be assigned by office',
+      appointmentTime: '',
       groomFullName: [form.groomFirstName, form.groomMiddleName, form.groomLastName, form.groomSuffix].filter(Boolean).join(' ').trim(),
       groomDob: [form.groomDobMonth, form.groomDobDay, form.groomDobYear].filter(Boolean).join('/'),
       groomAge: getAgeFromDob('groom') ?? '',
@@ -472,17 +884,22 @@ export default function ApplicantRegistration() {
           ...submittedForm,
           applicationData: submittedForm,
           applicantEmail: user.email,
-          documents: Object.fromEntries(Object.entries(documents).map(([key, value]) => [
+          documents: Object.fromEntries(allDocumentFields.filter(({ key }) => documents[key]).map(({ key }) => [
             key,
-            typeof value === 'string' ? value : value.dataUrl,
+            typeof documents[key] === 'string' ? documents[key] : documents[key].dataUrl,
           ])),
         }),
       })
 
-      if (!response.ok) throw new Error('Unable to submit application.')
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        throw new Error(result?.message || 'Unable to submit application.')
+      }
       navigate('/applicant/dashboard')
     } catch (error) {
-      setSubmitError(error.message)
+      setSubmitError(error instanceof TypeError
+        ? 'Unable to reach the server. Check your connection and try again.'
+        : error.message)
       setIsSubmitting(false)
     }
   }
@@ -507,16 +924,7 @@ export default function ApplicantRegistration() {
   }
 
   function autoFillDocuments() {
-    const documentValues = {
-      birthCertificateGroom: 'birth_certificate_groom.pdf',
-      birthCertificateBride: 'birth_certificate_bride.pdf',
-      certificateOfNoMarriage: 'cenomar.pdf',
-      validIdGroom: 'valid_id_groom.pdf',
-      validIdBride: 'valid_id_bride.pdf',
-      psaMarriageLicense: 'psa_marriage_license.pdf',
-      barangayClearance: 'barangay_clearance.pdf',
-      additionalRequirement: 'additional_requirement.pdf',
-    }
+    const documentValues = Object.fromEntries(personDocumentFields.map(({ key }) => [key, `${key}.pdf`]))
 
     setDocuments((current) => ({
       ...current,
@@ -525,7 +933,7 @@ export default function ApplicantRegistration() {
 
     setValidationErrors((current) => {
       const nextErrors = { ...current }
-      documentFields.forEach(({ key }) => {
+      personDocumentFields.forEach(({ key }) => {
         delete nextErrors[key]
       })
       return nextErrors
@@ -542,17 +950,10 @@ export default function ApplicantRegistration() {
       DobDay: isBride ? '24' : '15',
       DobMonth: isBride ? '06' : '04',
       DobYear: isBride ? '1997' : '1994',
-      Gender: isBride ? 'Male' : 'Female',
-      BirthPlaceCity: isBride ? 'Cebu City' : 'Quezon City',
-      BirthPlaceProvince: isBride ? 'Cebu' : 'Metro Manila',
-      BirthPlaceCountry: 'Philippines',
+      Gender: isBride ? 'Female' : 'Male',
       Citizenship: 'Filipino',
       ResidenceHouseNo: isBride ? '15' : '120',
       ResidenceStreet: isBride ? 'Lapu-Lapu Street' : 'Mabini Street',
-      ResidenceBarangay: isBride ? 'Barangay Guadalupe' : 'Barangay San Antonio',
-      ResidenceCity: isBride ? 'Cebu City' : 'Pasig City',
-      ResidenceProvince: isBride ? 'Cebu' : 'Metro Manila',
-      ResidenceCountry: 'Philippines',
       Religion: 'Roman Catholic',
       CivilStatus: 'Single',
       Mobile: isBride ? '09187654321' : '09171234567',
@@ -563,28 +964,17 @@ export default function ApplicantRegistration() {
       FatherCitizenship: 'Filipino',
       FatherResidenceHouseNo: isBride ? '18' : '123',
       FatherResidenceStreet: isBride ? 'Bahayang Street' : 'Mabini Street',
-      FatherResidenceBarangay: isBride ? 'Barangay Mambaling' : 'Barangay San Antonio',
-      FatherResidenceCity: isBride ? 'Cebu City' : 'Pasig City',
-      FatherResidenceProvince: isBride ? 'Cebu' : 'Metro Manila',
-      FatherResidenceCountry: 'Philippines',
       MotherMaidenFirstName: isBride ? 'Rosalinda' : 'Carmela',
       MotherMaidenMiddleName: isBride ? 'Villanueva' : 'Dela Rosa',
       MotherMaidenLastName: isBride ? 'Santos' : 'Cruz',
       MotherMaidenCitizenship: 'Filipino',
       MotherResidenceHouseNo: isBride ? '18' : '123',
       MotherResidenceStreet: isBride ? 'Bahayang Street' : 'Mabini Street',
-      MotherResidenceBarangay: isBride ? 'Barangay Mambaling' : 'Barangay San Antonio',
-      MotherResidenceCity: isBride ? 'Cebu City' : 'Pasig City',
-      MotherResidenceProvince: isBride ? 'Cebu' : 'Metro Manila',
-      MotherResidenceCountry: 'Philippines',
       AdvisorRelationship: 'Godfather',
+      AdvisorName: isBride ? 'Mateo Santos' : 'Carlos Cruz',
       AdvisorCitizenship: 'Filipino',
       AdvisorResidenceHouseNo: '9',
       AdvisorResidenceStreet: 'P. Burgos Street',
-      AdvisorResidenceBarangay: 'Barangay Santo Niño',
-      AdvisorResidenceCity: isBride ? 'Cebu City' : 'Pasig City',
-      AdvisorResidenceProvince: isBride ? 'Cebu' : 'Metro Manila',
-      AdvisorResidenceCountry: 'Philippines',
     }
 
     setForm((current) => {
@@ -614,7 +1004,7 @@ export default function ApplicantRegistration() {
           }
         }
       })
-      nextForm[`${targetPrefix}Gender`] = isBride ? 'Male' : 'Female'
+      nextForm[`${targetPrefix}Gender`] = isBride ? 'Female' : 'Male'
 
       const firstName = (nextForm[`${targetPrefix}FirstName`] || '').trim()
       const lastName = (nextForm[`${targetPrefix}LastName`] || '').trim()
@@ -643,6 +1033,79 @@ export default function ApplicantRegistration() {
     })
   }
 
+  const renderExtraInformation = () => {
+    const previousField = `${person}PreviouslyMarried`
+    const isPreviouslyMarried = (form[previousField] || '').toLowerCase() === 'yes'
+
+    return (
+      <>
+        <div className="extended-form-grid">
+          {extraInfoFields.map(({ key, label }) => (
+            <div key={`${person}-${key}`} className="field-group">
+              <label>{label}</label>
+              {key === 'previouslyMarried' ? (
+                <select
+                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
+                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
+                >
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              ) : (
+                <input
+                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
+                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
+                  placeholder={label}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {isPreviouslyMarried && (
+          <div className="dissolution-table-wrap">
+            <div className="dissolution-table-header">If previously married: how was it dissolved?</div>
+            <div className="dissolution-table">
+              <div className="field-group">
+                <label>How was it dissolved?</label>
+                <select
+                  value={form[`${person}DissolutionMethod`] ?? ''}
+                  onChange={(e) => updateField(`${person}DissolutionMethod`, e.target.value)}
+                >
+                  <option value="">Select</option>
+                  <option value="Death of spouse">Death of spouse</option>
+                  <option value="Annulment">Annulment</option>
+                  <option value="Divorce">Divorce</option>
+                  <option value="Legal separation">Legal separation</option>
+                </select>
+              </div>
+
+              <div className="field-group">
+                <label>Place where dissolved</label>
+                <input
+                  value={form[`${person}DissolutionPlace`] ?? ''}
+                  onChange={(e) => updateField(`${person}DissolutionPlace`, e.target.value)}
+                  placeholder="Place"
+                />
+              </div>
+
+              <div className="field-group">
+                <label>When dissolved</label>
+                <input
+                  value={form[`${person}DissolutionDate`] ?? ''}
+                  onChange={(e) => updateField(`${person}DissolutionDate`, formatDateInput(e.target.value))}
+                  placeholder="MM/DD/YYYY"
+                  maxLength={10}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
   const renderGroomBrideForm = () => {
     const firstField = `${person}FirstName`
     const middleField = `${person}MiddleName`
@@ -665,26 +1128,22 @@ export default function ApplicantRegistration() {
     const emailField = `${person}Email`
     const renderLabeledRelativeField = (fieldSuffix, label) => {
       const field = `${person}${fieldSuffix}`
+      const dropdownOptionKey = {
+        Citizenship: 'citizenship',
+        Country: 'country',
+        Province: 'province',
+        'City/Municipality': 'city',
+        Barangay: 'barangay',
+      }[label]
+
       return (
-        <div key={fieldSuffix} className="field-group">
-          <label>{label}</label>
-          <input value={form[field] ?? ''} onChange={(event) => updateField(field, event.target.value)} placeholder={label} />
+        <div key={fieldSuffix}>
+          {dropdownOptionKey
+            ? renderDropdownField(field, label, dropdownOptionKey)
+            : <div className="field-group"><label htmlFor={field}>{label}</label><input id={field} value={form[field] ?? ''} onChange={(event) => updateField(field, event.target.value)} placeholder={label} /><FieldError message={validationErrors[field]} /></div>}
         </div>
       )
     }
-    const renderRelativeLocationFields = (suffix) => (
-      <LocationFields
-        form={form}
-        fields={{
-          country: `${person}${suffix}Country`,
-          province: `${person}${suffix}Province`,
-          city: `${person}${suffix}City`,
-          barangay: `${person}${suffix}Barangay`,
-        }}
-        onChange={updateField}
-        includeBarangay
-      />
-    )
 
     return (
       <>
@@ -788,19 +1247,16 @@ export default function ApplicantRegistration() {
             </div>
             <FieldError message={validationErrors[`${person}Dob`]} />
 
-            <LocationFields
-              form={form}
-              fields={{ country: birthCountryField, province: birthProvinceField, city: birthCityField }}
-              onChange={updateField}
-            />
+            <div className="form-grid three-col">
+              {renderDropdownField(birthCountryField, 'Country', 'country')}
+              {renderDropdownField(birthProvinceField, 'Province', 'province')}
+              {renderDropdownField(birthCityField, 'City/Municipality', 'city')}
+            </div>
             </>}
 
             {personStep === 3 && <>
             <div className="form-grid two-col">
-              <div className="field-group">
-                <label>Citizenship</label>
-                <input value={form[citizenshipField]} onChange={(e) => updateField(citizenshipField, e.target.value)} placeholder="Citizenship" />
-              </div>
+              {renderDropdownField(citizenshipField, 'Citizenship', 'citizenship')}
 
               <div className="field-group">
                 <label>Civil Status</label>
@@ -808,6 +1264,7 @@ export default function ApplicantRegistration() {
                   <option value="">Select</option>
                   <option value="Single">Single</option>
                   <option value="Married">Married</option>
+                  <option value="Divorced">Divorced</option>
                   <option value="Widowed">Widowed</option>
                   <option value="Separated">Separated</option>
                 </select>
@@ -820,18 +1277,17 @@ export default function ApplicantRegistration() {
               <input value={form[religionField]} onChange={(e) => updateField(religionField, e.target.value)} placeholder="Religion / Religious Sect" />
             </div>
 
-            <LocationFields
-              form={form}
-              fields={{ country: residenceCountryField, province: residenceProvinceField, city: residenceCityField, barangay: barangayField }}
-              onChange={updateField}
-              includeBarangay
-            />
+            <div className="form-grid three-col">
+              {renderDropdownField(residenceCountryField, 'Country', 'country')}
+              {renderDropdownField(residenceProvinceField, 'Province', 'province')}
+              {renderDropdownField(residenceCityField, 'City/Municipality', 'city')}
 
-            <div className="form-grid two-col">
               <div className="field-group">
                 <label>House Number</label>
                 <input value={form[houseNoField]} onChange={(e) => updateField(houseNoField, e.target.value)} placeholder="House No." />
               </div>
+
+              {renderDropdownField(barangayField, 'Barangay', 'barangay')}
 
               <div className="field-group">
                 <label>Street</label>
@@ -892,36 +1348,33 @@ export default function ApplicantRegistration() {
               <>
                 <div className="field-group single-line-field" style={{ marginTop: '16px' }}>
                   <label>How was the marriage dissolved?</label>
-                  <input
+                  <select
                     value={form[`${person}DissolutionMethod`] ?? ''}
                     onChange={(event) => updateField(`${person}DissolutionMethod`, event.target.value)}
-                    placeholder="Type your answer"
-                  />
+                  >
+                    <option value="">Select</option>
+                    <option value="Death of spouse">Death of spouse</option>
+                    <option value="Divorce">Divorce</option>
+                    <option value="Annulment">Annulment</option>
+                    <option value="Legal separation">Legal separation</option>
+                  </select>
                 </div>
 
-                <LocationFields
-                  form={form}
-                  fields={{
-                    country: `${person}DissolutionCountry`,
-                    province: `${person}DissolutionProvince`,
-                    city: `${person}DissolutionCity`,
-                  }}
-                  onChange={updateField}
-                />
-
                 <div className="form-grid three-col" style={{ marginTop: '12px' }}>
-                  <div className="field-group">
-                    <label>Day</label>
-                    <input value={form[`${person}DissolutionDay`] ?? ''} onChange={(event) => updateField(`${person}DissolutionDay`, event.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="DD" inputMode="numeric" />
-                  </div>
-                  <div className="field-group">
-                    <label>Month</label>
-                    <input value={form[`${person}DissolutionMonth`] ?? ''} onChange={(event) => updateField(`${person}DissolutionMonth`, event.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="MM" inputMode="numeric" />
-                  </div>
-                  <div className="field-group">
-                    <label>Year</label>
-                    <input value={form[`${person}DissolutionYear`] ?? ''} onChange={(event) => updateField(`${person}DissolutionYear`, event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="YYYY" inputMode="numeric" />
-                  </div>
+                  {renderDropdownField(`${person}DissolutionCountry`, 'Country', 'country')}
+                  {renderDropdownField(`${person}DissolutionProvince`, 'Province', 'province')}
+                  {renderDropdownField(`${person}DissolutionCity`, 'City/Municipality', 'city')}
+                </div>
+
+                <div className="field-group" style={{ marginTop: '12px' }}>
+                  <label htmlFor={`${person}-dissolution-date`}>Date the marriage was dissolved</label>
+                  <input
+                    id={`${person}-dissolution-date`}
+                    type="date"
+                    value={getDissolutionDateInputValue(person)}
+                    max={getLocalDateInputValue()}
+                    onChange={(event) => updateDissolutionDate(person, event.target.value)}
+                  />
                 </div>
               </>
             )}
@@ -939,20 +1392,20 @@ export default function ApplicantRegistration() {
                 </div>
               </div>
 
-              <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
-                <label>Citizenship</label>
-                <input
-                  value={form[`${person}FatherCitizenship`] ?? ''}
-                  onChange={(e) => updateField(`${person}FatherCitizenship`, e.target.value)}
-                  placeholder="Citizenship"
-                />
-              </div>
+              {renderDropdownField(`${person}FatherCitizenship`, 'Citizenship', 'citizenship', 'single-line-field', { marginTop: '12px' })}
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
-                {renderRelativeLocationFields('FatherResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('FatherResidenceCountry', 'Country')}
+                  {renderLabeledRelativeField('FatherResidenceProvince', 'Province')}
+                </div>
+                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('FatherResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('FatherResidenceHouseNo', 'House No.')}
+                  {renderLabeledRelativeField('FatherResidenceBarangay', 'Barangay')}
+                </div>
+                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('FatherResidenceStreet', 'Street')}
                 </div>
               </div>
@@ -971,20 +1424,20 @@ export default function ApplicantRegistration() {
                 </div>
               </div>
 
-              <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
-                <label>Citizenship</label>
-                <input
-                  value={form[`${person}MotherMaidenCitizenship`] ?? ''}
-                  onChange={(e) => updateField(`${person}MotherMaidenCitizenship`, e.target.value)}
-                  placeholder="Citizenship"
-                />
-              </div>
+              {renderDropdownField(`${person}MotherMaidenCitizenship`, 'Citizenship', 'citizenship', 'single-line-field', { marginTop: '12px' })}
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
-                {renderRelativeLocationFields('MotherResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('MotherResidenceCountry', 'Country')}
+                  {renderLabeledRelativeField('MotherResidenceProvince', 'Province')}
+                </div>
+                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('MotherResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('MotherResidenceHouseNo', 'House No.')}
+                  {renderLabeledRelativeField('MotherResidenceBarangay', 'Barangay')}
+                </div>
+                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('MotherResidenceStreet', 'Street')}
                 </div>
               </div>
@@ -993,7 +1446,17 @@ export default function ApplicantRegistration() {
 
           {personStep === 7 && <>
             <div className="formal-box">
-              <div className="formal-box-title">Person Who Gave Advice</div>
+              <div className="formal-box-title">{advisorStepTitle}</div>
+
+              <div className="field-group single-line-field">
+                <label>Name</label>
+                <input
+                  value={form[`${person}AdvisorName`] ?? ''}
+                  onChange={(e) => updateField(`${person}AdvisorName`, e.target.value)}
+                  placeholder="Full name of parent"
+                />
+                <FieldError message={validationErrors[`${person}AdvisorName`]} />
+              </div>
 
               <div className="field-group single-line-field">
                 <label>Relationship</label>
@@ -1002,43 +1465,53 @@ export default function ApplicantRegistration() {
                   onChange={(e) => updateField(`${person}AdvisorRelationship`, e.target.value)}
                   placeholder="Relationship"
                 />
+                <FieldError message={validationErrors[`${person}AdvisorRelationship`]} />
               </div>
 
-              <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
-                <label>Citizenship</label>
-                <input
-                  value={form[`${person}AdvisorCitizenship`] ?? ''}
-                  onChange={(e) => updateField(`${person}AdvisorCitizenship`, e.target.value)}
-                  placeholder="Citizenship"
-                />
-              </div>
+              {renderDropdownField(`${person}AdvisorCitizenship`, 'Citizenship', 'citizenship', 'single-line-field', { marginTop: '12px' })}
 
               <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
                 <label className="family-section-label">Residence</label>
-                {renderRelativeLocationFields('AdvisorResidence')}
                 <div className="form-grid two-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('AdvisorResidenceCountry', 'Country')}
+                  {renderLabeledRelativeField('AdvisorResidenceProvince', 'Province')}
+                </div>
+                <div className="form-grid three-col" style={{ marginTop: '8px' }}>
+                  {renderLabeledRelativeField('AdvisorResidenceCity', 'City/Municipality')}
                   {renderLabeledRelativeField('AdvisorResidenceHouseNo', 'House No.')}
+                  {renderLabeledRelativeField('AdvisorResidenceBarangay', 'Barangay')}
+                </div>
+                <div className="form-grid" style={{ marginTop: '8px' }}>
                   {renderLabeledRelativeField('AdvisorResidenceStreet', 'Street')}
                 </div>
               </div>
             </div>
             </>}
+
+            {personStep === 8 && (
+              <>
+                <p className="section-subtitle">
+                  Upload this applicant’s documents. Applicants age 18 to 23 must attach a photo of parental consent. Applicants age 24 to 27 must attach parental advice. Applicants age 28 and older do not need parent-related documents.
+                </p>
+                {renderDocumentUpload(personDocumentFields, `${person === 'groom' ? 'Groom' : 'Bride'} Documents`)}
+              </>
+            )}
           </div>
       </>
     )
   }
 
-  const renderDocumentUpload = () => (
+  const renderDocumentUpload = (fields, title) => (
     <div className="document-upload-wrapper">
       <div className="auto-fill-row document-auto-fill-row">
-        <div className="formal-box-title">Legal Documents</div>
+        <div className="formal-box-title">{title}</div>
         <button type="button" className="auto-fill-button" onClick={autoFillDocuments}>
           Auto Fill
         </button>
       </div>
 
       <div className="document-grid">
-        {documentFields.map(({ key, label }) => (
+        {fields.map(({ key, label, accept = 'image/*,.pdf' }) => (
           <button
             key={key}
             type="button"
@@ -1050,6 +1523,7 @@ export default function ApplicantRegistration() {
                 fileInputRefs.current[key] = element
               }}
               type="file"
+              accept={accept}
               onChange={(event) => handleDocumentSelect(key, event)}
               className="hidden-file-input"
             />
@@ -1067,7 +1541,7 @@ export default function ApplicantRegistration() {
     <div className="appointment-form-layout">
       <div className="appointment-fields">
         <div className="field-group">
-          <label htmlFor="appointment-date">Appointment Date *</label>
+          <label htmlFor="appointment-date">Suggested Appointment Date *</label>
           <input
             id="appointment-date"
             type="date"
@@ -1079,23 +1553,28 @@ export default function ApplicantRegistration() {
           />
           <FieldError message={validationErrors.appointmentDate} />
         </div>
+
         <div className="field-group">
-          <label htmlFor="appointment-time">Appointment Time *</label>
-          <input
+          <label htmlFor="appointment-time">Suggested Appointment Time *</label>
+          <select
             id="appointment-time"
-            type="time"
             value={form.appointmentTime}
             onChange={(event) => updateField('appointmentTime', event.target.value)}
             aria-invalid={Boolean(validationErrors.appointmentTime)}
             required
-          />
+          >
+            <option value="">Select a time</option>
+            {appointmentTimeOptions.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <FieldError message={validationErrors.appointmentTime} />
         </div>
+
         <div className="field-group">
           <label>Office Location</label>
           <input value={form.appointmentLocation} readOnly />
         </div>
-        <p className="appointment-assignment-note">Choose an appointment date and time. The office will review the requested schedule.</p>
       </div>
     </div>
   )
@@ -1121,161 +1600,111 @@ export default function ApplicantRegistration() {
   )
 
   const renderReviewSummary = () => {
-    const renderOfficialField = (value, fallback = '—') => value || fallback
+    const displayValue = (value) => value || 'Not provided'
+    const renderReviewField = (label, value) => (
+      <div className="review-field" key={label}>
+        <span>{label}</span>
+        <strong>{displayValue(value)}</strong>
+      </div>
+    )
 
-    const renderPersonForm = (person) => {
-      const prefix = person
-      const firstName = renderOfficialField(form[`${prefix}FirstName`])
-      const middleName = renderOfficialField(form[`${prefix}MiddleName`])
-      const lastName = renderOfficialField(form[`${prefix}LastName`])
-      const fullName = [firstName, middleName, lastName].filter((value) => value !== '—').join(' ')
-      const preferredName = fullName || '—'
-      const placeOfBirth = [form[`${prefix}BirthPlaceCity`], form[`${prefix}BirthPlaceProvince`], form[`${prefix}BirthPlaceCountry`]].filter(Boolean).join(', ') || '—'
-      const residence = [form[`${prefix}ResidenceHouseNo`], form[`${prefix}ResidenceStreet`], form[`${prefix}ResidenceBarangay`], form[`${prefix}ResidenceCity`], form[`${prefix}ResidenceProvince`], form[`${prefix}ResidenceCountry`]].filter(Boolean).join(', ') || '—'
-      const fatherName = [form[`${prefix}FatherFirstName`], form[`${prefix}FatherMiddleName`], form[`${prefix}FatherLastName`]].filter(Boolean).join(' ') || '—'
-      const motherName = [form[`${prefix}MotherMaidenFirstName`], form[`${prefix}MotherMaidenMiddleName`], form[`${prefix}MotherMaidenLastName`]].filter(Boolean).join(' ') || '—'
-      const advisorInfo = [form[`${prefix}AdvisorRelationship`], form[`${prefix}AdvisorCitizenship`], form[`${prefix}AdvisorResidenceCity`]].filter(Boolean).join(' / ') || '—'
+    const renderPersonSummary = (person, title) => {
+      const fullName = [
+        form[`${person}FirstName`],
+        form[`${person}MiddleName`],
+        form[`${person}LastName`],
+        form[`${person}Suffix`],
+      ].filter(Boolean).join(' ')
+      const placeOfBirth = [
+        form[`${person}BirthPlaceCity`],
+        form[`${person}BirthPlaceProvince`],
+        form[`${person}BirthPlaceCountry`],
+      ].filter(Boolean).join(', ')
+      const residence = [
+        form[`${person}ResidenceHouseNo`],
+        form[`${person}ResidenceStreet`],
+        form[`${person}ResidenceBarangay`],
+        form[`${person}ResidenceCity`],
+        form[`${person}ResidenceProvince`],
+        form[`${person}ResidenceCountry`],
+      ].filter(Boolean).join(', ')
+      const fatherName = [
+        form[`${person}FatherFirstName`],
+        form[`${person}FatherMiddleName`],
+        form[`${person}FatherLastName`],
+      ].filter(Boolean).join(' ')
+      const motherName = [
+        form[`${person}MotherMaidenFirstName`],
+        form[`${person}MotherMaidenMiddleName`],
+        form[`${person}MotherMaidenLastName`],
+      ].filter(Boolean).join(' ')
+      const advisorInfo = [
+        form[`${person}AdvisorName`],
+        form[`${person}AdvisorRelationship`],
+        form[`${person}AdvisorCitizenship`],
+        form[`${person}AdvisorResidenceCity`],
+      ].filter(Boolean).join(' / ')
 
       return (
-        <div className="official-form-body">
-          <div className="official-form-name-row">
-            <div className="official-form-cell wide-cell">
-              <span>Full Name</span>
-              <strong>{preferredName}</strong>
-            </div>
-            <div className="official-form-cell small-cell">
-              <span>Age</span>
-              <strong>{renderOfficialField(form[`${prefix}Age`] || getAgeFromDob(prefix))}</strong>
-            </div>
+        <section className="review-section review-person" key={person}>
+          <h4>{title}</h4>
+          <div className="review-details-grid">
+            {renderReviewField('Full name', fullName)}
+            {renderReviewField('Age', form[`${person}Age`] || getAgeFromDob(person))}
+            {renderReviewField('Date of birth', form[`${person}Dob`])}
+            {renderReviewField('Gender', form[`${person}Gender`])}
+            {renderReviewField('Citizenship', form[`${person}Citizenship`])}
+            {renderReviewField('Civil status', form[`${person}CivilStatus`])}
+            {renderReviewField('Place of birth', placeOfBirth)}
+            {renderReviewField('Religion', form[`${person}Religion`])}
+            {renderReviewField('Residence', residence)}
+            {renderReviewField('Mobile', form[`${person}Mobile`])}
+            {renderReviewField('Email', form[`${person}Email`])}
+            {renderReviewField('Father', fatherName)}
+            {renderReviewField('Mother', motherName)}
+            {renderReviewField('Person who gave consent/advice', advisorInfo)}
+            {renderReviewField('Previously married', form[`${person}PreviouslyMarried`])}
           </div>
-
-          <div className="official-form-three-col">
-            <div className="official-form-cell">
-              <span>First Name</span>
-              <strong>{firstName}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Middle Name</span>
-              <strong>{middleName}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Last Name</span>
-              <strong>{lastName}</strong>
-            </div>
-          </div>
-
-          <div className="official-form-four-col">
-            <div className="official-form-cell">
-              <span>Date of Birth</span>
-              <strong>{renderOfficialField(form[`${prefix}Dob`])}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Gender</span>
-              <strong>{renderOfficialField(form[`${prefix}Gender`])}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Citizenship</span>
-              <strong>{renderOfficialField(form[`${prefix}Citizenship`])}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Civil Status</span>
-              <strong>{renderOfficialField(form[`${prefix}CivilStatus`])}</strong>
-            </div>
-          </div>
-
-          <div className="official-form-three-col">
-            <div className="official-form-cell">
-              <span>Birth Place</span>
-              <strong>{placeOfBirth}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Religion</span>
-              <strong>{renderOfficialField(form[`${prefix}Religion`])}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Residence</span>
-              <strong>{residence}</strong>
-            </div>
-          </div>
-
-          <div className="official-form-two-col">
-            <div className="official-form-cell">
-              <span>Mobile</span>
-              <strong>{renderOfficialField(form[`${prefix}Mobile`])}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Email</span>
-              <strong>{renderOfficialField(form[`${prefix}Email`])}</strong>
-            </div>
-          </div>
-
-          <div className="official-form-two-col">
-            <div className="official-form-cell">
-              <span>Father</span>
-              <strong>{fatherName}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Mother</span>
-              <strong>{motherName}</strong>
-            </div>
-          </div>
-
-          <div className="official-form-two-col">
-            <div className="official-form-cell">
-              <span>Advisor</span>
-              <strong>{advisorInfo}</strong>
-            </div>
-            <div className="official-form-cell">
-              <span>Previously Married</span>
-              <strong>{renderOfficialField(form[`${prefix}PreviouslyMarried`])}</strong>
-            </div>
-          </div>
-        </div>
+        </section>
       )
     }
 
     return (
-      <div className="official-print-form">
-        <h2 className="official-review-title">Application Review</h2>
-
-        <div className="official-double-col">
-          <div className="official-person-panel">
-            <div className="official-panel-title">GROOM</div>
-            {renderPersonForm('groom')}
-          </div>
-
-          <div className="official-person-panel">
-            <div className="official-panel-title">BRIDE</div>
-            {renderPersonForm('bride')}
-          </div>
+      <div className="review-summary">
+        <div className="review-summary-header">
+          <h2>Review your application</h2>
+          <p>Check the information and uploaded documents before submitting.</p>
         </div>
 
-        <div className="official-bottom-boxes">
-          <div className="official-bottom-row">
-            <span>Preferred Date</span>
-            <strong>{form.appointmentDate || '—'}</strong>
-          </div>
-          <div className="official-bottom-row">
-            <span>Preferred Time</span>
-            <strong>{form.appointmentTime || '—'}</strong>
-          </div>
-          <div className="official-bottom-row">
-            <span>Payment</span>
-            <strong>Pay over the counter (cash only) / {form.paymentAmount || '₱ 800.00'}</strong>
-          </div>
+        <div className="review-people-grid">
+          {renderPersonSummary('groom', 'Groom')}
+          {renderPersonSummary('bride', 'Bride')}
         </div>
 
-        <div className="official-documents-box">
-          <div className="official-panel-title small">REQUIRED DOCUMENTS</div>
-          <div className="official-doc-list">
-            {documentFields.map(({ key, label }) => (
-              <div key={key} className="official-doc-item">
+        <section className="review-section">
+          <h4>Appointment and payment</h4>
+          <div className="review-details-grid">
+            {renderReviewField('Preferred date', form.appointmentDate)}
+            {renderReviewField('Preferred time', form.appointmentTime ? formatAppointmentTime(form.appointmentTime) : '')}
+            {renderReviewField('Office location', form.appointmentLocation)}
+            {renderReviewField('Payment method', 'Pay over the counter (cash only)')}
+            {renderReviewField('Amount', form.paymentAmount)}
+          </div>
+        </section>
+
+        <section className="review-section">
+          <h4>Required documents</h4>
+          <div className="review-document-list">
+            {allDocumentFields.map(({ key, label }) => (
+              <div className="review-document" key={key}>
                 <span>{label}</span>
-                <strong>{typeof documents[key] === 'string' ? documents[key] : documents[key]?.name || 'Not uploaded'}</strong>
+                <strong>{documents[key]
+                  ? typeof documents[key] === 'string' ? documents[key] : documents[key].name
+                  : 'Not uploaded'}</strong>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       </div>
     )
   }
@@ -1299,7 +1728,7 @@ export default function ApplicantRegistration() {
         </div>
 
         <div className="registration-header">
-          <h1>{step === 4 ? 'Marriage Registration' : currentTitle}</h1>
+          <h1>{step === 3 ? 'Marriage Registration' : currentTitle}</h1>
           <div className="registration-account-menu">
             <button
               type="button"
@@ -1330,30 +1759,24 @@ export default function ApplicantRegistration() {
             <h2>{progressLabel}</h2>
             {step === 3 ? (
               <>
-                <h3>Legal Docs</h3>
-                <p className="section-subtitle">Upload the required documents for verification.</p>
-                {renderDocumentUpload()}
-              </>
-            ) : step === 4 ? (
-              <>
                 <h3>Appointment</h3>
-                <p className="section-subtitle">Choose your appointment date and time at Villaverde.</p>
+                <p className="section-subtitle">Enter your suggested appointment date and time. The office will confirm the schedule at Villaverde.</p>
                 {renderAppointmentForm()}
               </>
-            ) : step === 5 ? (
+            ) : step === 4 ? (
               <>
                 <h3>Payment</h3>
                 <p className="section-subtitle">Select your preferred payment method.</p>
                 {renderPaymentForm()}
               </>
-            ) : step === 6 ? (
+            ) : step === 5 ? (
               <>
                 <h3>Review</h3>
                 {renderReviewSummary()}
               </>
             ) : (
               <>
-                <h3>{step === 1 ? 'Groom' : 'Bride'} - {personStepLabels[personStep - 1]}</h3>
+                <h3>{step === 1 ? 'Groom' : 'Bride'} - {currentPersonStepLabel}</h3>
                 {renderGroomBrideForm()}
               </>
             )}
@@ -1366,16 +1789,16 @@ export default function ApplicantRegistration() {
               </button>
             )}
 
-            <button type="button" className="primary-button" onClick={step === 6 ? submitApplication : nextStep} disabled={isSubmitting}>
+            <button type="button" className="primary-button" onClick={step === 5 ? submitApplication : nextStep} disabled={isSubmitting}>
               {isSubmitting
                 ? 'Submitting...'
-                : step === 6
+                : step === 5
                   ? 'Submit Application'
-                  : step === 5
+                  : step === 4
                     ? 'Review Application'
-                    : step <= 2
+                    : isPersonInformationStep
                       ? personStep < personStepLabels.length
-                        ? `Next: ${personStepLabels[personStep]} →`
+                        ? `Next: ${nextPersonStepLabel} →`
                         : `Next: ${stepLabels[step]} →`
                       : step === 3
                         ? 'Next: Appointment →'

@@ -9,7 +9,7 @@ export default defineConfig({
     allowedHosts: ['.loca.lt'],
     hmr: false,
     proxy: {
-      '/api': 'http://localhost:5000',
+      '/api': 'http://[::1]:5000',
     },
   },
 })

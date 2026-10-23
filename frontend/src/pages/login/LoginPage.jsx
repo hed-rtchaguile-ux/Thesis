@@ -31,8 +31,6 @@ export default function LoginPage() {
 
       const destination = location.state?.from?.pathname || `/${result.role}/dashboard`
       navigate(destination, { replace: true })
-    } catch {
-      setError('Unable to sign in. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
