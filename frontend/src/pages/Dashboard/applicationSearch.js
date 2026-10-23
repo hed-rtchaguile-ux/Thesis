@@ -12,14 +12,34 @@ export function filterApplications(applications, searchTerm) {
   ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch)))
 }
 
+export function getApplicationWorkflowStatus(application) {
+  if (application.status === 'Rejected') return 'Rejected'
+  if (application.status === 'Verified' && application.licenseReleaseDate) return 'Complete'
+  if (application.status === 'Verified') return 'Verified'
+  return 'Under Review'
+}
+
+export function filterApplicationsByStatus(applications, status) {
+  if (!status || status === 'All') return applications
+  return applications.filter((application) => getApplicationWorkflowStatus(application) === status)
+}
+
 export function getAppointmentDate(application) {
-  return application.appointmentDate && application.appointmentDate !== 'To be assigned by office'
-    ? application.appointmentDate
-    : ''
+  if (application.appointmentDate && application.appointmentDate !== 'To be assigned by office') return application.appointmentDate
+  return application.preferredAppointmentDate || ''
+}
+
+export function getFirstAppointmentDate(application) {
+  return getAppointmentDate(application)
+}
+
+export function getFirstAppointmentTime(application) {
+  if (application.appointmentDate && application.appointmentDate !== 'To be assigned by office') return application.appointmentTime || ''
+  return application.preferredAppointmentTime || application.appointmentTime || ''
 }
 
 export function getAppointmentTime(application) {
-  return getAppointmentDate(application) ? application.appointmentTime || '' : ''
+  return getAppointmentDate(application) ? getFirstAppointmentTime(application) : ''
 }
 
 function getAppointmentTimeValue(value) {

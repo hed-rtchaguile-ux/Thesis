@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
+import SecondAppointmentControl from './SecondAppointmentControl'
 import { ReportCards } from './AdminTools'
-import { filterApplications, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
+import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
+import logoImage from '../../assets/wedrings-mark.png'
 import './ApplicantDashboard.css'
 
 function getAppointmentDateKey(value) {
@@ -35,6 +37,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   const [showAllApplications, setShowAllApplications] = useState(false)
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
 
   useEffect(() => {
     apiFetch('/api/applications')
@@ -59,7 +62,10 @@ export default function AdminDashboard({ view = 'dashboard' }) {
     ? applications
     : applications.filter((application) => application.status === pageFilter)
   const appointmentApplications = sortAppointments(applications, getAppointmentDateKey)
-  const searchedApplications = filterApplications(view === 'appointments' ? appointmentApplications : filteredApplications, searchTerm)
+  const statusApplications = view === 'appointments'
+    ? appointmentApplications
+    : filterApplicationsByStatus(filteredApplications, statusFilter)
+  const searchedApplications = filterApplications(statusApplications, searchTerm)
   const visibleApplications = view !== 'dashboard' || showAllApplications ? searchedApplications : searchedApplications.slice(0, 3)
   const pageTitle = view === 'verified' ? 'Verified records.' : view === 'all' ? 'All applications.' : view === 'reports' ? 'Applicant reports.' : 'Application overview.'
   const pageDescription = view === 'verified' ? 'Review applications that have already been verified.' : view === 'all' ? 'Review every application submitted to the office.' : view === 'reports' ? 'Track applicant submissions by day, month, and year.' : 'Here is an overview of your application workspace.'
@@ -68,6 +74,9 @@ export default function AdminDashboard({ view = 'dashboard' }) {
     <main className="applicant-shell admin-applicant-shell">
       <aside className="applicant-sidebar">
         <div className="brand-row">
+          <span className="brand-mark" aria-label="WedRings logo">
+            <img src={logoImage} alt="" className="brand-logo" />
+          </span>
           <span className="brand-name">WEDRINGS</span>
         </div>
         <nav className="sidebar-nav" aria-label="Admin navigation">
@@ -94,7 +103,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
             <p className="admin-schedule-readonly-note">Applicants select their appointment date and time during registration.</p>
           </section>}
 
-          {(view === 'dashboard' || view === 'reports') && <ReportCards applications={applications} />}
+          {(view === 'dashboard' || view === 'reports') && <ReportCards applications={applications} showDateFilter={view === 'reports'} />}
 
           {view !== 'appointments' && <div className="summary-grid">
             <article className="summary-card"><div className="card-icon" aria-hidden="true">▣</div><div className="summary-copy"><span>Pending Review</span><strong>{applications.filter((application) => application.status === 'For Review').length}</strong></div></article>
@@ -102,10 +111,13 @@ export default function AdminDashboard({ view = 'dashboard' }) {
             <article className="summary-card" id="admin-verified"><div className="card-icon" aria-hidden="true">✓</div><div className="summary-copy"><span>Verified Records</span><strong>{applications.filter((application) => application.status === 'Verified').length}</strong></div></article>
           </div>}
 
-          <section className="quick-actions admin-review-panel" id="admin-queue">
+          {view !== 'reports' && <section className="quick-actions admin-review-panel" id="admin-queue">
             <div className="admin-section-heading">
               <h3>{view === 'appointments' ? 'Scheduled applicants' : view === 'dashboard' ? 'Application Queue' : pageTitle.replace('.', '')}</h3>
               <input className="admin-applicant-search" type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search names, email, or phone" aria-label="Search applicants" />
+              {view !== 'appointments' && <select className="admin-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter applicants by status">
+                {['All', 'Under Review', 'Verified', 'Complete', 'Rejected'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>}
               {view === 'dashboard' && <button className="admin-view-button" type="button" onClick={() => setShowAllApplications((currentValue) => !currentValue)}>{showAllApplications ? 'Show recent' : 'View all'}</button>}
             </div>
 
@@ -123,6 +135,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
                       <small>{application.applicantEmail}</small>
+                      {view !== 'appointments' && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
                       {view === 'appointments' && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     </div>
                     <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>
@@ -130,18 +143,21 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                     </button>
                     {view !== 'appointments' && application.status === 'Verified' && <LicenseReleaseControl application={application} onSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))} />}
                   </div>
-                  {detailsOpen && <ApplicationDetails application={application} />}
+                  {detailsOpen && <ApplicationDetails
+                    application={application}
+                    onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+                  />}
                 </div>
               )
             })}
-          </section>
+          </section>}
         </div>
       </section>
     </main>
   )
 }
 
-function ApplicationDetails({ application }) {
+function ApplicationDetails({ application, onAppointmentSaved }) {
   const documents = Object.entries(application.documents || {})
 
   return (
@@ -149,6 +165,7 @@ function ApplicationDetails({ application }) {
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
+      <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <article className="admin-submitted-document" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /></article>) : <p>No documents listed.</p>}</div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>

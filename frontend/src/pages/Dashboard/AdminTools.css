@@ -35,6 +35,11 @@
   gap: 12px;
 }
 
+.admin-report-period-grid {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  margin-top: 14px;
+}
+
 .admin-report-grid article {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -61,6 +66,37 @@
 .admin-report-grid small {
   color: #748078;
   font-size: 11px;
+}
+
+.admin-report-date-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  color: #53645d;
+  font-size: 13px;
+}
+
+.admin-report-date-filter label,
+.admin-report-date-filter > strong {
+  font-weight: 700;
+}
+
+.admin-report-date-filter input,
+.admin-report-date-filter select,
+.admin-report-date-filter button {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #d6ddd8;
+  border-radius: 5px;
+  color: #27332e;
+  background: #fff;
+  font: inherit;
+}
+
+.admin-report-date-filter button {
+  cursor: pointer;
 }
 
 .admin-applicant-search {

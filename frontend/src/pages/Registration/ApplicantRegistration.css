@@ -32,7 +32,10 @@
   height: 32px;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .registration-sidebar .brand-logo {

@@ -1,37 +1,10 @@
 const path = require('node:path');
-const os = require('node:os');
-const fs = require('node:fs/promises');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const { pathToFileURL } = require('node:url');
 const ExcelJS = require('exceljs');
 
 const FORM_ROWS = 98;
 const FORM_COLUMNS = 33;
 const TEMPLATE_PATH = path.join(__dirname, '..', 'frontend', 'public', 'marriage-license-template.xlsx');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const execFileAsync = promisify(execFile);
-const PDF_BROWSER_PATHS = [
-  process.env.CHROME_PATH,
-  process.env.EDGE_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-].filter(Boolean);
-
-async function findPdfBrowser() {
-  for (const browserPath of PDF_BROWSER_PATHS) {
-    try {
-      await fs.access(browserPath);
-      return browserPath;
-    } catch {
-      // Try the next standard browser installation path.
-    }
-  }
-
-  throw new Error('Install Chrome or Edge, or set CHROME_PATH or EDGE_PATH to its executable.');
-}
 
 function join(values, separator = ', ') {
   return values.filter(Boolean).join(separator);
@@ -97,12 +70,12 @@ function personAddress(application, person, prefix = '') {
 
 function fillPerson(sheet, application, person, side, formValueCells) {
   const cells = side === 'groom'
-    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A48', fatherMiddle: 'F48', fatherLast: 'J48', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A53', motherMiddle: 'F53', motherLast: 'J53', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A58', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
-    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U48', fatherMiddle: 'Z48', fatherLast: 'AE48', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U53', motherMiddle: 'Z53', motherLast: 'AE53', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U58', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
+    ? { first: 'D23', middle: 'D24', last: 'D25', day: 'B28', month: 'E28', year: 'I28', age: 'L28', birth: 'A30', birthCountry: 'L30', sex: 'A32', citizenship: 'H32', residence: 'A34', religion: 'A35', civilStatus: 'A37', previouslyMarried: 'A38', dissolutionPlace: 'A42', dissolutionDay: 'A44', dissolutionMonth: 'F44', dissolutionYear: 'K44', relationship: 'A46', fatherFirst: 'A47', fatherMiddle: 'F47', fatherLast: 'J47', fatherCitizenship: 'A49', fatherResidence: 'A51', motherFirst: 'A52', motherMiddle: 'F52', motherLast: 'J52', motherCitizenship: 'A54', motherResidence: 'A56', advisorName: 'A60', advisorRelationship: 'A61', advisorCitizenship: 'A62', advisorResidence: 'A64' }
+    : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U47', fatherMiddle: 'Z47', fatherLast: 'AE47', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U52', motherMiddle: 'Z52', motherLast: 'AE52', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U60', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
   const set = (key, value) => {
     const cell = sheet.getCell(cells[key]);
     cell.value = value || '';
-    formValueCells.add(cell.address);
+    if (value !== undefined && value !== null && value !== '') formValueCells.add(cell.address);
   };
   const name = personName(application, person);
   const dob = personDateParts(application, person);
@@ -155,10 +128,6 @@ function fillPerson(sheet, application, person, side, formValueCells) {
   set('fatherFirst', fatherName.first);
   set('fatherMiddle', fatherName.middle);
   set('fatherLast', fatherName.last);
-  ['fatherFirst', 'fatherMiddle', 'fatherLast', 'motherFirst', 'motherMiddle', 'motherLast'].forEach((key) => {
-    const cell = sheet.getCell(cells[key]);
-    cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
-  });
   set('fatherCitizenship', application[`${person}FatherCitizenship`]);
   set('fatherResidence', personAddress(application, person, 'Father'));
   set('motherFirst', motherName.first);
@@ -174,81 +143,9 @@ function fillPerson(sheet, application, person, side, formValueCells) {
 
 function fillTemplate(sheet, application) {
   const formValueCells = new Set();
-  const groomMaritalHistoryCell = sheet.getCell('A38');
-  groomMaritalHistoryCell.alignment = {
-    ...groomMaritalHistoryCell.alignment,
-    horizontal: 'center',
-    vertical: 'middle',
-    wrapText: true,
-  };
   fillPerson(sheet, application, 'groom', 'groom', formValueCells);
   fillPerson(sheet, application, 'bride', 'bride', formValueCells);
   return formValueCells;
-}
-
-async function buildPrintFormPdf(application) {
-  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'wedrings-print-'));
-  const htmlPath = path.join(tempDirectory, 'application.html');
-  const pdfPath = path.join(tempDirectory, 'application.pdf');
-
-  try {
-    const formTable = await buildPrintFormHtml(application);
-    const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @page { size: 8.5in 13in; margin: 0.25in; }
-    * { box-sizing: border-box; }
-    html, body { width: 100%; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; }
-    .print-page { width: 8in; height: 12.5in; overflow: hidden; }
-    .excel-form-table { width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 0; transform-origin: top left; }
-    .excel-form-table td { box-sizing: border-box; }
-  </style>
-</head>
-<body>
-  <main class="print-page">${formTable}</main>
-  <script>
-    (() => {
-      const page = document.querySelector('.print-page');
-      const table = page?.querySelector('.excel-form-table');
-      if (!page || !table) throw new Error('The marriage license form could not be laid out for printing.');
-
-      const formHeight = table.getBoundingClientRect().height;
-      const printableHeight = 12.5 * 96;
-      const pageFillFactor = 1.25;
-      if (!formHeight) throw new Error('The marriage license form has no printable dimensions.');
-
-      table.style.transform = \`scaleY(\${Math.min(1, (printableHeight / formHeight) * pageFillFactor)})\`;
-    })();
-  </script>
-</body>
-</html>`;
-    await fs.writeFile(htmlPath, html, 'utf8');
-
-    const browserPath = await findPdfBrowser();
-    await execFileAsync(browserPath, [
-      '--headless',
-      '--disable-gpu',
-      '--disable-extensions',
-      '--disable-background-networking',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--no-pdf-header-footer',
-      `--user-data-dir=${path.join(tempDirectory, 'browser-profile')}`,
-      `--print-to-pdf=${pdfPath}`,
-      pathToFileURL(htmlPath).href,
-    ], { timeout: 30000 });
-
-    const pdf = await fs.readFile(pdfPath);
-    if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
-      throw new Error('The browser did not produce a valid PDF file.');
-    }
-    return pdf;
-  } finally {
-    await fs.rm(tempDirectory, { recursive: true, force: true });
-  }
 }
 
 function escapeHtml(value) {
@@ -275,20 +172,19 @@ function borderValue(side) {
   return `${widths[side.style] || '1px'} ${lineStyle} ${colorValue(side.color, '#333333')}`;
 }
 
-function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = false) {
+function cellCss(cell, isTemplateText, mergedBorders = {}) {
   const style = cell.style || {};
   const font = style.font || {};
   const alignment = style.alignment || {};
   const fill = style.fill || {};
-  const fontSize = font.size || 8;
   const css = {
-    'text-align': isCenterPrompt || alignment.horizontal === 'centerContinuous' ? 'center' : alignment.horizontal || 'left',
+    'text-align': alignment.horizontal || 'left',
     'vertical-align': alignment.vertical === 'center' ? 'middle' : alignment.vertical || 'top',
     'white-space': alignment.wrapText ? 'pre-wrap' : 'nowrap',
     'font-family': `${font.name || 'Arial'}, sans-serif`,
-    'font-size': `${isTemplateText ? fontSize : 8}pt`,
-    'font-weight': isTemplateText ? (font.bold ? '700' : '400') : '700',
-    'font-style': isTemplateText && font.italic ? 'italic' : 'normal',
+    'font-size': `${font.size || 8}pt`,
+    'font-weight': font.bold ? '700' : '400',
+    'font-style': font.italic ? 'italic' : 'normal',
     'text-decoration': font.underline ? 'underline' : 'none',
     color: colorValue(font.color, '#111111'),
     padding: '1px 2px',
@@ -305,11 +201,11 @@ function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = fals
   return Object.entries(css).map(([key, value]) => `${key}:${escapeHtml(value)}`).join(';');
 }
 
-function mergeLayout(sheet, additionalMerges = []) {
+function mergeLayout(sheet) {
   const starts = new Map();
   const skipped = new Set();
 
-  for (const range of [...sheet.model.merges, ...additionalMerges]) {
+  for (const range of sheet.model.merges) {
     const [start, end] = range.split(':');
     const startCell = sheet.getCell(start);
     const endCell = sheet.getCell(end);
@@ -326,13 +222,9 @@ function mergeLayout(sheet, additionalMerges = []) {
     const topRightCell = sheet.getCell(startCell.row, visibleEndColumn);
     const bottomLeftCell = sheet.getCell(Math.min(endCell.row, FORM_ROWS), visibleStartColumn);
     const bottomRightCell = sheet.getCell(Math.min(endCell.row, FORM_ROWS), visibleEndColumn);
-    const visibleRowSpan = Array.from(
-      { length: Math.min(endCell.row, FORM_ROWS) - startCell.row + 1 },
-      (_, index) => startCell.row + index,
-    ).filter((rowNumber) => !sheet.getRow(rowNumber).hidden).length;
 
     starts.set(visibleStartCell.address, {
-      rowSpan: visibleRowSpan,
+      rowSpan: Math.min(endCell.row, FORM_ROWS) - startCell.row + 1,
       colSpan: visibleColumns.length,
       valueSource: startCell.address,
       borders: {
@@ -369,7 +261,7 @@ async function buildPrintFormHtml(application) {
   }
 
   const formValueCells = fillTemplate(sheet, { ...(application.applicationData || {}), ...application });
-  const { starts, skipped } = mergeLayout(sheet, ['R32:T32', 'R35:T35', 'R36:T36']);
+  const { starts, skipped } = mergeLayout(sheet);
   const visibleColumns = Array.from({ length: FORM_COLUMNS }, (_, index) => index + 1)
     .filter((column) => !sheet.getColumn(column).hidden);
   const totalWidth = visibleColumns.map((column) => sheet.getColumn(column).width || 8)
@@ -381,7 +273,6 @@ async function buildPrintFormHtml(application) {
 
   for (let rowNumber = 1; rowNumber <= FORM_ROWS; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
-    if (row.hidden) continue;
     const cells = [];
     for (let column = 1; column <= FORM_COLUMNS; column += 1) {
       if (sheet.getColumn(column).hidden) continue;
@@ -398,13 +289,62 @@ async function buildPrintFormHtml(application) {
         isTemplateText ? 'template-text' : 'form-value',
         isCenterPrompt ? 'center-prompt' : '',
       ].filter(Boolean).join(' ');
-      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, isCenterPrompt)}">${escapeHtml(text)}</td>`);
+      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders)}">${escapeHtml(text)}</td>`);
     }
     const height = ((row.height || 12.75) * 96) / 72;
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
   }
 
-  return `<table class="excel-form-table" aria-label="Completed Application for Marriage License"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Application for Marriage License</title>
+  <style>
+    @page { size: 8.5in 13in; margin: 0.25in; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { color: #111; font-family: Arial, sans-serif; }
+    .form-page {
+      position: relative;
+      width: 8in;
+      height: 12.5in;
+      overflow: hidden;
+      margin: 0 auto;
+      background: #fff;
+    }
+    .excel-form-table {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 11.111111in;
+      height: 16.677083in;
+      border-collapse: collapse;
+      table-layout: fixed;
+      transform: scale(0.72);
+      transform-origin: top left;
+    }
+    .excel-form-table td { box-sizing: border-box; }
+    .excel-form-table td.form-value { font-weight: 700 !important; }
+    .excel-form-table td.center-prompt { text-align: center !important; }
+    @media screen {
+      body { padding: 24px; background: #e9e9e9; }
+      .form-page { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
+    }
+    @media print {
+      html, body { width: 8in; height: 12.5in; }
+      .form-page { margin: 0; }
+      .excel-form-table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <main class="form-page">
+    <table class="excel-form-table" aria-label="Completed Application for Marriage License"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>
+  </main>
+</body>
+</html>`;
 }
 
-module.exports = { buildPrintFormHtml, buildPrintFormPdf };
+module.exports = { buildPrintFormHtml };

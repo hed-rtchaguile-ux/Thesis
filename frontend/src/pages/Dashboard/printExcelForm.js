@@ -14,9 +14,11 @@ export async function printExcelForm(applicationId) {
     const response = await apiFetch(`/api/applications/${applicationId}/print`)
     if (!response.ok) throw new Error('Unable to prepare the application form for printing.')
 
-    const pdfUrl = URL.createObjectURL(await response.blob())
-    printWindow.location.replace(pdfUrl)
-    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000)
+    const html = await response.text()
+    const printOnLoad = '<script>window.addEventListener("load", () => { window.focus(); window.print(); }, { once: true });</script>'
+    printWindow.document.open()
+    printWindow.document.write(html.replace('</body>', `${printOnLoad}</body>`))
+    printWindow.document.close()
   } catch (error) {
     printWindow.close()
     window.alert(error.message)

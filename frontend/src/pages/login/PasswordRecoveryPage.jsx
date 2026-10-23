@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import logoImage from '../../assets/log.png'
+import logoImage from '../../assets/wedrings-mark.png'
 import './LoginPage.css'
 
 export default function PasswordRecoveryPage({ mode }) {
