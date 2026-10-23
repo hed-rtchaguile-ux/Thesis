@@ -35,15 +35,22 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   const [updatingDocumentKey, setUpdatingDocumentKey] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     apiFetch('/api/applications')
       .then((response) => {
-        if (!response.ok) throw new Error('Unable to load applications.')
+        if (!response.ok) throw new Error(`Unable to load applications (${response.status}).`)
         return response.json()
       })
-      .then((fetchedApplications) => setApplications(Array.isArray(fetchedApplications) ? fetchedApplications : []))
-      .catch(() => setApplications([]))
+      .then((fetchedApplications) => {
+        setApplications(Array.isArray(fetchedApplications) ? fetchedApplications : [])
+        setLoadError('')
+      })
+      .catch((error) => {
+        setApplications([])
+        setLoadError(error.message || 'Unable to load applications.')
+      })
   }, [])
 
   async function updateApplicationStatus(applicationId, status) {
@@ -204,7 +211,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
               </select>}
             </div>
 
-            {visibleApplications.length === 0 && <p className="admin-empty-state">{searchTerm ? 'No applicants match your search.' : 'No submitted applicants yet.'}</p>}
+            {visibleApplications.length === 0 && <p className="admin-empty-state">{loadError || (searchTerm ? 'No applicants match your search.' : 'No submitted applicants yet.')}</p>}
 
             {visibleApplications.map((application) => {
               const appointmentDate = getAppointmentDate(application)

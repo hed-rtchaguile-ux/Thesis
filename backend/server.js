@@ -85,7 +85,7 @@ const applicationSchema = new mongoose.Schema({
   licenseReleaseDate: String,
 }, { timestamps: true });
 
-const Application = mongoose.model('Application', applicationSchema, 'info_wedrings');
+const Application = mongoose.model('Application', applicationSchema, 'applications');
 const accountSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true },
@@ -418,11 +418,46 @@ mongoose.connect(DATABASE_CONNECTION_STRING, {
 
     try {
       const collections = await mongoose.connection.db.listCollections().toArray();
-      const hasCollection = collections.some((collection) => collection.name === 'info_wedrings');
+      const collectionNames = new Set(collections.map((collection) => collection.name));
 
-      if (!hasCollection) {
-        await mongoose.connection.db.createCollection('info_wedrings');
-        console.log('Created MongoDB collection: info_wedrings');
+      if (!collectionNames.has('applications')) {
+        await mongoose.connection.db.createCollection('applications');
+        console.log('Created MongoDB collection: applications');
+      }
+
+      // Keep legacy applicant submissions visible after the collection name
+      // changed. Copy only missing IDs and retain the original collection.
+      if (collectionNames.has('info_wedrings')) {
+        const legacyApplications = mongoose.connection.db.collection('info_wedrings');
+        const targetApplications = mongoose.connection.db.collection('applications');
+        let migrationBatch = [];
+        let copiedCount = 0;
+
+        for await (const legacyApplication of legacyApplications.find()) {
+          const { _id, ...legacyFields } = legacyApplication;
+          migrationBatch.push({
+            updateOne: {
+              filter: { _id },
+              update: { $setOnInsert: legacyFields },
+              upsert: true,
+            },
+          });
+
+          if (migrationBatch.length === 500) {
+            const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
+            copiedCount += result.upsertedCount;
+            migrationBatch = [];
+          }
+        }
+
+        if (migrationBatch.length > 0) {
+          const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
+          copiedCount += result.upsertedCount;
+        }
+
+        if (copiedCount > 0) {
+          console.log(`Copied ${copiedCount} legacy application(s) into applications.`);
+        }
       }
 
       const legacyVerifyUpdate = await Application.updateMany(

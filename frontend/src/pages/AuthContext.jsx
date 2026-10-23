@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthContext } from './auth'
 
 function readStoredUser() {
@@ -16,6 +16,17 @@ function readStoredUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser)
+
+  useEffect(() => {
+    function expireSession() {
+      sessionStorage.removeItem('wedrings-token')
+      sessionStorage.removeItem('wedrings-user')
+      setUser(null)
+    }
+
+    window.addEventListener('wedrings:session-expired', expireSession)
+    return () => window.removeEventListener('wedrings:session-expired', expireSession)
+  }, [])
 
   async function login(email, password) {
     try {

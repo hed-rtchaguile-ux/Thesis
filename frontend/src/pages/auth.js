@@ -29,5 +29,10 @@ export function apiFetch(resource, options = {}) {
   const token = sessionStorage.getItem('wedrings-token')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  return fetch(resource, { ...options, headers })
+  return fetch(resource, { ...options, headers }).then((response) => {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event('wedrings:session-expired'))
+    }
+    return response
+  })
 }
