@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { AuthContext } from './auth'
+import { useEffect, useState } from 'react'
+import { AUTH_SESSION_EXPIRED_EVENT, AuthContext } from './auth'
 
 function readStoredUser() {
   try {
@@ -16,6 +16,17 @@ function readStoredUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser)
+  const [sessionExpired, setSessionExpired] = useState(false)
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      setUser(null)
+      setSessionExpired(true)
+    }
+
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired)
+  }, [])
 
   async function login(email, password) {
     try {
@@ -31,6 +42,7 @@ export function AuthProvider({ children }) {
       sessionStorage.setItem('wedrings-token', result.token)
       sessionStorage.setItem('wedrings-user', JSON.stringify(result.user))
       setUser(result.user)
+      setSessionExpired(false)
       return { success: true, role: result.user.role }
     } catch {
       return { success: false, message: 'Unable to reach the sign-in service.' }
@@ -51,6 +63,7 @@ export function AuthProvider({ children }) {
       sessionStorage.setItem('wedrings-token', result.token)
       sessionStorage.setItem('wedrings-user', JSON.stringify(result.user))
       setUser(result.user)
+      setSessionExpired(false)
       return { success: true, role: result.user.role }
     } catch {
       return { success: false, message: 'Unable to reach the registration service.' }
@@ -61,7 +74,8 @@ export function AuthProvider({ children }) {
     sessionStorage.removeItem('wedrings-token')
     sessionStorage.removeItem('wedrings-user')
     setUser(null)
+    setSessionExpired(false)
   }
 
-  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, login, register, logout, sessionExpired }}>{children}</AuthContext.Provider>
 }

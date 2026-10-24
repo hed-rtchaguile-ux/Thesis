@@ -101,7 +101,10 @@ function fillPerson(sheet, application, person, side, formValueCells) {
     : { first: 'X23', middle: 'X24', last: 'X25', day: 'U28', month: 'W28', year: 'AB28', age: 'AE28', birth: 'U30', birthCountry: 'AE30', sex: 'U32', citizenship: 'AA32', residence: 'U34', religion: 'U35', civilStatus: 'U37', previouslyMarried: 'U38', dissolutionPlace: 'U42', dissolutionDay: 'U44', dissolutionMonth: 'Z44', dissolutionYear: 'AE44', relationship: 'U46', fatherFirst: 'U48', fatherMiddle: 'Z48', fatherLast: 'AE48', fatherCitizenship: 'U49', fatherResidence: 'U51', motherFirst: 'U53', motherMiddle: 'Z53', motherLast: 'AE53', motherCitizenship: 'U54', motherResidence: 'U56', advisorName: 'U58', advisorRelationship: 'U61', advisorCitizenship: 'U62', advisorResidence: 'U64' };
   const set = (key, value) => {
     const cell = sheet.getCell(cells[key]);
-    cell.value = value || '';
+    cell.value = key === 'day' && value ? String(value).padStart(2, '0') : value || '';
+    if (['day', 'month', 'year', 'age'].includes(key)) {
+      cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
     formValueCells.add(cell.address);
   };
   const name = personName(application, person);
@@ -359,6 +362,9 @@ async function buildPrintFormHtml(application) {
   if (!sheet) throw new Error('The workbook does not contain its Front form sheet.');
 
   sheet.getCell('P28').value = null;
+  sheet.getCell('B27').value = '(Day)';
+  sheet.getCell('U27').value = '(Day)';
+  sheet.getCell('G17').value = sheet.getCell('X17').value;
 
   const templateTextCells = new Set();
   for (let row = 1; row <= FORM_ROWS; row += 1) {

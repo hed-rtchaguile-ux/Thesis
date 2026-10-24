@@ -95,10 +95,12 @@ function getApplicantDocumentFields(form, applicant) {
   const dissolutionMethod = (form[`${applicant}DissolutionMethod`] || '').toLowerCase()
   const civilStatus = (form[`${applicant}CivilStatus`] || '').toLowerCase()
   const citizenship = (form[`${applicant}Citizenship`] || '').trim().toLowerCase()
+  const residenceCountry = (form[`${applicant}ResidenceCountry`] || '').trim().toLowerCase()
   const requiresCourtDecree = ['divorce', 'annulment'].includes(dissolutionMethod)
     || ['divorced', 'annulled'].includes(civilStatus)
   const requiresDeathCertificate = civilStatus === 'widowed' || dissolutionMethod === 'death of spouse'
-  const requiresLegalCapacity = citizenship !== '' && citizenship !== 'filipino'
+  const requiresLegalCapacity = (citizenship !== '' && citizenship !== 'filipino')
+    || (residenceCountry !== '' && residenceCountry !== 'philippines')
   const day = Number(form[`${applicant}DobDay`] || 0)
   const month = Number(form[`${applicant}DobMonth`] || 0)
   const year = Number(form[`${applicant}DobYear`] || 0)
@@ -1263,7 +1265,6 @@ export default function ApplicantRegistration() {
                 <select value={form[civilStatusField]} onChange={(e) => updateField(civilStatusField, e.target.value)}>
                   <option value="">Select</option>
                   <option value="Single">Single</option>
-                  <option value="Married">Married</option>
                   <option value="Divorced">Divorced</option>
                   <option value="Widowed">Widowed</option>
                   <option value="Separated">Separated</option>

@@ -54,6 +54,9 @@ export default function LoginPage() {
         <div className="panel-inner">
           <h2>Welcome Back</h2>
           <p className="form-lead">Log in to your account to continue.</p>
+          {location.state?.sessionExpired && (
+            <p className="form-error" role="alert">Your session expired. Please log in again.</p>
+          )}
 
           <form onSubmit={handleSubmit} className="login-form">
             <label htmlFor="login-email">Email Address</label>
