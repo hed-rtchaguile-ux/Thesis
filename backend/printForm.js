@@ -26,7 +26,6 @@ async function findPdfBrowser() {
       await fs.access(browserPath);
       return browserPath;
     } catch {
-      // Try the next standard browser installation path.
     }
   }
 
@@ -102,7 +101,9 @@ function fillPerson(sheet, application, person, side, formValueCells) {
   const set = (key, value) => {
     const cell = sheet.getCell(cells[key]);
     cell.value = key === 'day' && value ? String(value).padStart(2, '0') : value || '';
-    if (['day', 'month', 'year', 'age'].includes(key)) {
+    if (key === 'first' && side === 'groom') {
+      cell.alignment = { ...(cell.alignment || {}), horizontal: 'left', vertical: 'middle', wrapText: true };
+    } else if (['day', 'month', 'year', 'age'].includes(key)) {
       cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
     }
     formValueCells.add(cell.address);
@@ -180,6 +181,13 @@ function fillTemplate(sheet, application) {
   const groomMaritalHistoryCell = sheet.getCell('A38');
   groomMaritalHistoryCell.alignment = {
     ...groomMaritalHistoryCell.alignment,
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true,
+  };
+  const consentPromptCell = sheet.getCell('R58');
+  consentPromptCell.alignment = {
+    ...consentPromptCell.alignment,
     horizontal: 'center',
     vertical: 'middle',
     wrapText: true,
@@ -278,14 +286,14 @@ function borderValue(side) {
   return `${widths[side.style] || '1px'} ${lineStyle} ${colorValue(side.color, '#333333')}`;
 }
 
-function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = false) {
+function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = false, isLeftAlignedValue = false) {
   const style = cell.style || {};
   const font = style.font || {};
   const alignment = style.alignment || {};
   const fill = style.fill || {};
   const fontSize = font.size || 8;
   const css = {
-    'text-align': isCenterPrompt || alignment.horizontal === 'centerContinuous' ? 'center' : alignment.horizontal || 'left',
+    'text-align': isLeftAlignedValue ? 'left' : isCenterPrompt || alignment.horizontal === 'centerContinuous' ? 'center' : alignment.horizontal || 'left',
     'vertical-align': alignment.vertical === 'center' ? 'middle' : alignment.vertical || 'top',
     'white-space': alignment.wrapText ? 'pre-wrap' : 'nowrap',
     'font-family': `${font.name || 'Arial'}, sans-serif`,
@@ -404,7 +412,8 @@ async function buildPrintFormHtml(application) {
         isTemplateText ? 'template-text' : 'form-value',
         isCenterPrompt ? 'center-prompt' : '',
       ].filter(Boolean).join(' ');
-      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, isCenterPrompt)}">${escapeHtml(text)}</td>`);
+      const isGroomFirstName = formValueCells.has(valueCell.address) && valueCell.address === 'D23';
+      cells.push(`<td class="${cellClass}" data-cell="${cell.address}"${rowSpan}${colSpan} style="${cellCss(valueCell, isTemplateText, span.borders, isCenterPrompt, isGroomFirstName)}">${escapeHtml(text)}</td>`);
     }
     const height = ((row.height || 12.75) * 96) / 72;
     rows.push(`<tr style="height:${height}px">${cells.join('')}</tr>`);
