@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
-import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
 
 function formatAppointmentDate(value, time = '') {
@@ -28,7 +27,7 @@ export default function ApplicantDashboard() {
   const [applicationsStatus, setApplicationsStatus] = useState('loading')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedApplication, setSelectedApplication] = useState(null)
-  const [isEditingApplication, setIsEditingApplication] = useState(false)
+  const [editingSection, setEditingSection] = useState('')
   const [editForm, setEditForm] = useState({})
   const [editDocuments, setEditDocuments] = useState({})
   const [editError, setEditError] = useState('')
@@ -121,29 +120,65 @@ export default function ApplicantDashboard() {
     navigate('/login')
   }
 
+  function getEditableApplicationData(applicationRecord) {
+    const applicationData = applicationRecord.applicationData
+    if (!applicationData || typeof applicationData !== 'object' || Array.isArray(applicationData)) {
+      return {
+        groomFullName: applicationRecord.groomFullName || '',
+        groomDob: applicationRecord.groomDob || '',
+        groomGender: applicationRecord.groomGender || '',
+        groomCivilStatus: applicationRecord.groomCivilStatus || '',
+        groomMobile: applicationRecord.groomMobile || '',
+        groomEmail: applicationRecord.groomEmail || '',
+        brideFullName: applicationRecord.brideFullName || '',
+        brideDob: applicationRecord.brideDob || '',
+        brideGender: applicationRecord.brideGender || '',
+        brideCivilStatus: applicationRecord.brideCivilStatus || '',
+        brideMobile: applicationRecord.brideMobile || '',
+        brideEmail: applicationRecord.brideEmail || '',
+        appointmentDate: applicationRecord.preferredAppointmentDate || '',
+        appointmentTime: applicationRecord.preferredAppointmentTime || '',
+        paymentMethod: applicationRecord.paymentMethod || '',
+        paymentAmount: applicationRecord.paymentAmount || '',
+      }
+    }
+
+    const editableData = { ...applicationData }
+    const derivedFields = [
+      ...(applicationData.groomFirstName || applicationData.groomLastName
+        ? ['groomFullName', 'groomDob']
+        : []),
+      ...(applicationData.brideFirstName || applicationData.brideLastName
+        ? ['brideFullName', 'brideDob']
+        : []),
+      'groomAge',
+      'brideAge',
+      'preferredAppointmentDate',
+      'preferredAppointmentTime',
+      'appointmentLocation',
+    ]
+    derivedFields.forEach((field) => delete editableData[field])
+
+    return {
+      ...editableData,
+      appointmentDate: applicationRecord.preferredAppointmentDate || applicationData.preferredAppointmentDate || '',
+      appointmentTime: applicationRecord.preferredAppointmentTime || applicationData.preferredAppointmentTime || '',
+      paymentMethod: applicationRecord.paymentMethod || applicationData.paymentMethod || '',
+      paymentAmount: applicationRecord.paymentAmount || applicationData.paymentAmount || '',
+    }
+  }
+
   function openApplication(applicationRecord, editing = false) {
     setSelectedApplication(applicationRecord)
-    setIsEditingApplication(editing)
+    setEditingSection(editing ? 'groom' : '')
     setEditError('')
-    setEditForm({
-      groomFullName: applicationRecord.groomFullName || '',
-      groomDob: applicationRecord.groomDob || '',
-      groomGender: applicationRecord.groomGender || '',
-      groomCivilStatus: applicationRecord.groomCivilStatus || '',
-      groomMobile: applicationRecord.groomMobile || '',
-      groomEmail: applicationRecord.groomEmail || '',
-      brideFullName: applicationRecord.brideFullName || '',
-      brideDob: applicationRecord.brideDob || '',
-      brideGender: applicationRecord.brideGender || '',
-      brideCivilStatus: applicationRecord.brideCivilStatus || '',
-      brideMobile: applicationRecord.brideMobile || '',
-      brideEmail: applicationRecord.brideEmail || '',
-    })
+    setEditForm(getEditableApplicationData(applicationRecord))
     setEditDocuments(applicationRecord.documents || {})
   }
 
   async function openNotification(notification) {
     openApplication(notification.application, notification.editing)
+    if (notification.notificationKey.startsWith('redo-')) setEditingSection('documents')
     try {
       const response = await apiFetch(`/api/applications/${notification.application._id}/notifications/${notification.notificationKey}/read`, { method: 'PUT' })
       if (!response.ok) throw new Error('Unable to mark notification as read.')
@@ -162,11 +197,69 @@ export default function ApplicantDashboard() {
     setEditError('')
 
     try {
+      const getPersonValues = (person) => {
+        const hasNameParts = [`${person}FirstName`, `${person}LastName`].some((field) => field in editForm)
+        const hasDobParts = [`${person}DobDay`, `${person}DobMonth`, `${person}DobYear`].some((field) => field in editForm)
+        const fullName = hasNameParts
+          ? [`${person}FirstName`, `${person}MiddleName`, `${person}LastName`, `${person}Suffix`]
+            .map((field) => editForm[field])
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+          : editForm[`${person}FullName`] || ''
+        const dob = hasDobParts
+          ? [`${person}DobMonth`, `${person}DobDay`, `${person}DobYear`]
+            .map((field) => editForm[field])
+            .filter(Boolean)
+            .join('/')
+          : editForm[`${person}Dob`] || ''
+        const day = Number(editForm[`${person}DobDay`])
+        const month = Number(editForm[`${person}DobMonth`])
+        const year = Number(editForm[`${person}DobYear`])
+        let age = ''
+        if (day && month && year) {
+          const dateOfBirth = new Date(year, month - 1, day)
+          const today = new Date()
+          const isValidDate = dateOfBirth.getFullYear() === year
+            && dateOfBirth.getMonth() === month - 1
+            && dateOfBirth.getDate() === day
+            && dateOfBirth <= today
+          if (isValidDate) {
+            age = today.getFullYear() - year
+            if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age -= 1
+          }
+        }
+
+        return {
+          [`${person}FullName`]: fullName,
+          [`${person}Dob`]: dob,
+          [`${person}Age`]: age,
+        }
+      }
+      const updatedPersonValues = {
+        ...getPersonValues('groom'),
+        ...getPersonValues('bride'),
+      }
+      const preferredAppointmentDate = editForm.appointmentDate || ''
+      const preferredAppointmentTime = editForm.appointmentTime || ''
+      const updatedApplicationData = {
+        ...(selectedApplication.applicationData || {}),
+        ...editForm,
+        ...updatedPersonValues,
+        preferredAppointmentDate,
+        preferredAppointmentTime,
+        appointmentDate: selectedApplication.applicationData?.appointmentDate ?? selectedApplication.appointmentDate,
+        appointmentTime: selectedApplication.applicationData?.appointmentTime ?? selectedApplication.appointmentTime,
+      }
       const response = await apiFetch(`/api/applications/${selectedApplication._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...editForm,
+          ...updatedPersonValues,
+          preferredAppointmentDate,
+          preferredAppointmentTime,
+          applicationData: updatedApplicationData,
           documents: Object.fromEntries(Object.entries(editDocuments).map(([key, value]) => [
             key,
             typeof value === 'string' ? value : value.dataUrl,
@@ -180,7 +273,7 @@ export default function ApplicantDashboard() {
         item._id === updatedApplication._id ? updatedApplication : item
       )))
       setSelectedApplication(updatedApplication)
-      setIsEditingApplication(false)
+      setEditingSection('')
     } catch (error) {
       setEditError(error.message)
     } finally {
@@ -205,6 +298,54 @@ export default function ApplicantDashboard() {
     }
     reader.readAsDataURL(selectedFile)
   }
+
+  function formatEditFieldLabel(key) {
+    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
+  }
+
+  function cancelSectionEdit() {
+    setEditForm(getEditableApplicationData(selectedApplication))
+    setEditDocuments(selectedApplication.documents || {})
+    setEditingSection('')
+    setEditError('')
+  }
+
+  function renderEditFields(fields) {
+    return (
+      <div className="applicant-edit-grid">
+        {fields.map((field) => (
+          <label key={field}>
+            {formatEditFieldLabel(field)}
+            <input
+              type={field === 'appointmentDate' ? 'date' : 'text'}
+              value={String(editForm[field] ?? '')}
+              onChange={(event) => updateEditField(field, event.target.value)}
+            />
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  function renderSectionActions() {
+    return (
+      <>
+        <button type="button" className="application-view-button" onClick={cancelSectionEdit}>Cancel</button>
+        <button type="submit" className="application-edit-button" disabled={isSavingEdit}>
+          {isSavingEdit ? 'Saving...' : 'Save changes'}
+        </button>
+      </>
+    )
+  }
+
+  const groomEditFields = Object.keys(editForm).filter((field) => field.startsWith('groom') && field !== 'groomAge')
+  const brideEditFields = Object.keys(editForm).filter((field) => field.startsWith('bride') && field !== 'brideAge')
+  const appointmentEditFields = ['appointmentDate', 'appointmentTime'].filter((field) => field in editForm)
+  const otherEditFields = Object.keys(editForm).filter((field) => (
+    !field.startsWith('groom')
+    && !field.startsWith('bride')
+    && !appointmentEditFields.includes(field)
+  ))
 
   return (
     <section className="applicant-main">
@@ -363,38 +504,121 @@ export default function ApplicantDashboard() {
           }}>
             <section className="applicant-modal" role="dialog" aria-modal="true" aria-labelledby="application-modal-title">
               <div className="applicant-modal-header">
-                <div><span className="application-label">Submitted form</span><h2 id="application-modal-title">{isEditingApplication ? 'Edit your information' : 'Application details'}</h2></div>
+                <div><span className="application-label">Submitted form</span><h2 id="application-modal-title">Application details</h2></div>
                 <button type="button" className="applicant-modal-close" onClick={() => setSelectedApplication(null)} aria-label="Close application">x</button>
               </div>
 
-              {isEditingApplication ? (
-                <form className="applicant-edit-form" onSubmit={saveApplicationEdit}>
-                  <div className="applicant-edit-grid">
-                    {['groomFullName', 'groomDob', 'groomGender', 'groomCivilStatus', 'groomMobile', 'groomEmail', 'brideFullName', 'brideDob', 'brideGender', 'brideCivilStatus', 'brideMobile', 'brideEmail'].map((field) => (
-                      <label key={field}>{field.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())}<input value={editForm[field] || ''} onChange={(event) => updateEditField(field, event.target.value)} /></label>
+              <div className="applicant-submission-details">
+                <section className="applicant-detail-card">
+                  <div className="applicant-detail-heading">
+                    <h3>Groom information</h3>
+                    {editingSection !== 'groom' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('groom'); setEditError('') }}>Edit information</button>}
+                  </div>
+                  {editingSection === 'groom' ? (
+                    <form onSubmit={saveApplicationEdit}>
+                      {renderEditFields(groomEditFields)}
+                      <div className="applicant-modal-actions">{renderSectionActions()}</div>
+                      {editError && <p className="application-edit-error">{editError}</p>}
+                    </form>
+                  ) : groomEditFields.map((field) => (
+                    <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
+                  ))}
+                </section>
+
+                <section className="applicant-detail-card">
+                  <div className="applicant-detail-heading">
+                    <h3>Bride information</h3>
+                    {editingSection !== 'bride' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('bride'); setEditError('') }}>Edit information</button>}
+                  </div>
+                  {editingSection === 'bride' ? (
+                    <form onSubmit={saveApplicationEdit}>
+                      {renderEditFields(brideEditFields)}
+                      <div className="applicant-modal-actions">{renderSectionActions()}</div>
+                      {editError && <p className="application-edit-error">{editError}</p>}
+                    </form>
+                  ) : brideEditFields.map((field) => (
+                    <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
+                  ))}
+                </section>
+
+                <section className="applicant-detail-card">
+                  <div className="applicant-detail-heading">
+                    <h3>Appointment</h3>
+                    {editingSection !== 'appointment' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('appointment'); setEditError('') }}>Edit information</button>}
+                  </div>
+                  {editingSection === 'appointment' ? (
+                    <form onSubmit={saveApplicationEdit}>
+                      {renderEditFields(appointmentEditFields)}
+                      <div className="applicant-modal-actions">{renderSectionActions()}</div>
+                      {editError && <p className="application-edit-error">{editError}</p>}
+                    </form>
+                  ) : (
+                    <>
+                      <p><strong>Preferred date:</strong> {formatAppointmentDate(selectedApplication.preferredAppointmentDate)}</p>
+                      <p><strong>Preferred time:</strong> {selectedApplication.preferredAppointmentTime || 'Not provided'}</p>
+                      <p><strong>Scheduled date:</strong> {formatAppointmentDate(selectedApplication.appointmentDate)}</p>
+                      <p><strong>Scheduled time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p>
+                      <p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p>
+                      <p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p>
+                    </>
+                  )}
+                </section>
+
+                {otherEditFields.length > 0 && (
+                  <section className="applicant-detail-card">
+                    <div className="applicant-detail-heading">
+                      <h3>Other submitted information</h3>
+                      {editingSection !== 'other' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('other'); setEditError('') }}>Edit information</button>}
+                    </div>
+                    {editingSection === 'other' ? (
+                      <form onSubmit={saveApplicationEdit}>
+                        {renderEditFields(otherEditFields)}
+                        <div className="applicant-modal-actions">{renderSectionActions()}</div>
+                        {editError && <p className="application-edit-error">{editError}</p>}
+                      </form>
+                    ) : otherEditFields.map((field) => (
+                      <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
                     ))}
-                  </div>
-                  <div className="applicant-edit-documents">
-                    <h3>Submitted documents</h3>
-                    {Object.entries(editDocuments).map(([key, value]) => (
-                      <label key={key}>{key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())}<input type="file" accept="image/*,.pdf" onChange={(event) => updateEditDocument(key, event)} /><small>{typeof value === 'string' ? 'Document saved' : value?.name || 'Choose a replacement file'}</small></label>
+                  </section>
+                )}
+
+                {Object.keys(editDocuments).length > 0 && (
+                  <section className="applicant-detail-card applicant-edit-documents">
+                    <div className="applicant-detail-heading">
+                      <h3>Submitted documents</h3>
+                      {editingSection !== 'documents' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('documents'); setEditError('') }}>Edit information</button>}
+                    </div>
+                    {editingSection === 'documents' ? (
+                      <form onSubmit={saveApplicationEdit}>
+                        {Object.entries(editDocuments).map(([key, value]) => (
+                          <label key={key}>{formatEditFieldLabel(key)}<input type="file" accept="image/*,.pdf" onChange={(event) => updateEditDocument(key, event)} /><small>{typeof value === 'string' ? 'Document saved' : value?.name || 'Choose a replacement file'}</small></label>
+                        ))}
+                        <div className="applicant-modal-actions">{renderSectionActions()}</div>
+                        {editError && <p className="application-edit-error">{editError}</p>}
+                      </form>
+                    ) : Object.entries(editDocuments).map(([key]) => (
+                      <p key={key}><strong>{formatEditFieldLabel(key)}:</strong> {selectedApplication.documents?.[key] ? 'Document saved' : 'Not provided'}</p>
                     ))}
-                  </div>
-                  <div className="applicant-modal-actions"><button type="button" className="application-view-button" onClick={() => setIsEditingApplication(false)}>Cancel</button><button type="submit" className="application-edit-button" disabled={isSavingEdit}>{isSavingEdit ? 'Saving...' : 'Save changes'}</button></div>
-                  {editError && <p className="application-edit-error">{editError}</p>}
-                </form>
-              ) : (
-                <div className="applicant-submission-details">
-                  <div><h3>Groom information</h3><p><strong>Name:</strong> {selectedApplication.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {selectedApplication.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {selectedApplication.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {selectedApplication.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {selectedApplication.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {selectedApplication.groomEmail || 'Not provided'}</p></div>
-                  <div><h3>Bride information</h3><p><strong>Name:</strong> {selectedApplication.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {selectedApplication.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {selectedApplication.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {selectedApplication.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {selectedApplication.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {selectedApplication.brideEmail || 'Not provided'}</p></div>
-                  <div><h3>Appointment</h3><p><strong>Date:</strong> {formatAppointmentDate(selectedApplication.appointmentDate)}</p><p><strong>Time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p><p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p><p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p></div>
-                  <div className="applicant-document-review"><h3>Document review</h3>{Object.entries(selectedApplication.documents || {}).map(([key]) => { const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'; const reviewNote = selectedApplication.documentReviewNotes?.[key]; return <p key={key}><strong>{key}:</strong> <span className={reviewStatus === 'Needs Redo' ? 'document-status-redo' : ''}>{reviewStatus}</span>{reviewStatus === 'Needs Redo' && <small className="document-redo-note">{reviewNote || 'Please replace this document and save your changes.'}</small>}</p> })}</div>
-                  <div className="applicant-modal-actions">
-                    <button type="button" className="application-view-button" onClick={() => printExcelForm(selectedApplication._id)}>Print form</button>
-                    <button type="button" className="application-edit-button" onClick={() => setIsEditingApplication(true)}>Edit information</button>
-                  </div>
+                  </section>
+                )}
+
+                <div className="applicant-document-review">
+                  <h3>Document review</h3>
+                  {Object.entries(selectedApplication.documents || {}).map(([key]) => {
+                    const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'
+                    const reviewNote = selectedApplication.documentReviewNotes?.[key]
+                    return (
+                      <p key={key}>
+                        <strong>{formatEditFieldLabel(key)}:</strong>
+                        <span className={reviewStatus === 'Needs Redo' ? 'document-status-redo' : ''}>{reviewStatus}</span>
+                        {reviewStatus === 'Needs Redo' && (
+                          <small className="document-redo-note">{reviewNote || 'Please replace this document and save your changes.'}</small>
+                        )}
+                      </p>
+                    )
+                  })}
                 </div>
-              )}
+              </div>
             </section>
           </div>
         )}
