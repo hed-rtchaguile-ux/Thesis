@@ -48,16 +48,32 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function register(name, email, password) {
+  async function requestRegistrationCode(name, email, password) {
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register/request-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
       })
       const result = await response.json()
 
-      if (!response.ok) return { success: false, message: result.message || 'Unable to create the account.' }
+      if (!response.ok) return { success: false, message: result.message || 'Unable to send the verification code.' }
+      return { success: true, message: result.message }
+    } catch {
+      return { success: false, message: 'Unable to reach the registration service.' }
+    }
+  }
+
+  async function register(email, code) {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) return { success: false, message: result.message || 'Unable to verify the account.' }
 
       sessionStorage.setItem('wedrings-token', result.token)
       sessionStorage.setItem('wedrings-user', JSON.stringify(result.user))
@@ -74,5 +90,5 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
-  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, login, register, requestRegistrationCode, logout }}>{children}</AuthContext.Provider>
 }

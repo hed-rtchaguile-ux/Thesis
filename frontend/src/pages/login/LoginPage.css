@@ -224,6 +224,18 @@
   cursor: pointer;
 }
 
+.login-form button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.login-form .signup-resend-button {
+  margin-top: 0;
+  border: 1px solid #d5d3ce;
+  background: transparent;
+  color: var(--deep-sage);
+}
+
 .form-error {
   margin: 0;
   color: #ad4f43;

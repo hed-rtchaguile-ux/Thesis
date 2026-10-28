@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
+import { printExcelForm } from './printExcelForm'
 import './ApplicantDashboard.css'
 
 function formatAppointmentDate(value, time = '') {
@@ -641,6 +642,12 @@ export default function ApplicantDashboard() {
                       </p>
                     )
                   })}
+                </div>
+
+                <div className="applicant-modal-actions">
+                  <button type="button" className="application-view-button" onClick={() => printExcelForm(selectedApplication._id)}>
+                    Print form
+                  </button>
                 </div>
               </div>
             </section>
