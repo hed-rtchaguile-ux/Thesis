@@ -11,17 +11,12 @@ export async function printExcelForm(applicationId) {
   printWindow.document.body.textContent = 'Preparing application form...'
 
   try {
-    const response = await apiFetch(`/api/applications/${applicationId}/print`)
-    if (!response.ok) {
-      const result = await response.json().catch(() => null)
-      throw new Error(result?.message || result?.error || `Unable to prepare the application form for printing (${response.status}).`)
-    }
+    const response = await apiFetch(`/api/applications/${applicationId}/print/pdf`)
+    if (!response.ok) throw new Error('Unable to prepare the application form for printing.')
 
-    const html = await response.text()
-    const printOnLoad = '<script>window.addEventListener("load", () => { window.focus(); window.print(); }, { once: true });</script>'
-    printWindow.document.open()
-    printWindow.document.write(html.replace('</body>', `${printOnLoad}</body>`))
-    printWindow.document.close()
+    const pdfUrl = URL.createObjectURL(await response.blob())
+    printWindow.location.replace(pdfUrl)
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000)
   } catch (error) {
     printWindow.close()
     window.alert(error.message)

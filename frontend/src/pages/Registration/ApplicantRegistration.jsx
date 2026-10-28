@@ -95,10 +95,12 @@ function getApplicantDocumentFields(form, applicant) {
   const dissolutionMethod = (form[`${applicant}DissolutionMethod`] || '').toLowerCase()
   const civilStatus = (form[`${applicant}CivilStatus`] || '').toLowerCase()
   const citizenship = (form[`${applicant}Citizenship`] || '').trim().toLowerCase()
+  const residenceCountry = (form[`${applicant}ResidenceCountry`] || '').trim().toLowerCase()
   const requiresCourtDecree = ['divorce', 'annulment'].includes(dissolutionMethod)
     || ['divorced', 'annulled'].includes(civilStatus)
   const requiresDeathCertificate = civilStatus === 'widowed' || dissolutionMethod === 'death of spouse'
-  const requiresLegalCapacity = citizenship !== '' && citizenship !== 'filipino'
+  const requiresLegalCapacity = (citizenship !== '' && citizenship !== 'filipino')
+    || (residenceCountry !== '' && residenceCountry !== 'philippines')
   const day = Number(form[`${applicant}DobDay`] || 0)
   const month = Number(form[`${applicant}DobMonth`] || 0)
   const year = Number(form[`${applicant}DobYear`] || 0)
@@ -153,22 +155,6 @@ function getApplicantDocumentFields(form, applicant) {
 
   return [...documentFields[applicant], ...fields]
 }
-
-const extraInfoFields = [
-  { key: 'age', label: 'Age' },
-  { key: 'placeOfBirth', label: 'Place of Birth' },
-  { key: 'residence', label: 'Residence' },
-  { key: 'religion', label: 'Religion' },
-  { key: 'fatherName', label: "Father's Name" },
-  { key: 'motherMaidenName', label: "Mother's Maiden Name" },
-  { key: 'citizenship', label: 'Citizenship' },
-  { key: 'previouslyMarried', label: 'Previously Married?' },
-  { key: 'dateOfMarriage', label: 'Date of Marriage' },
-  { key: 'occupation', label: 'Occupation' },
-  { key: 'contactNumber', label: 'Contact Number' },
-  { key: 'parentConsent', label: 'Parent Consent' },
-  { key: 'declaration', label: 'Declaration' },
-]
 
 const initialForm = {
   groomFirstName: '',
@@ -324,26 +310,6 @@ const initialForm = {
 
 const namePattern = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function isValidDate(value) {
-  const normalizedValue = value.replace(/-/g, '/')
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(normalizedValue)
-  if (!match) return false
-
-  const [, month, day, year] = match
-  const date = new Date(Number(year), Number(month) - 1, Number(day))
-  return date.getFullYear() === Number(year)
-    && date.getMonth() === Number(month) - 1
-    && date.getDate() === Number(day)
-    && date < new Date()
-}
-
-function formatDateInput(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 8)
-  if (digits.length <= 2) return digits
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
-}
 
 function getLocalDateInputValue() {
   const now = new Date()
@@ -1033,79 +999,6 @@ export default function ApplicantRegistration() {
     })
   }
 
-  const renderExtraInformation = () => {
-    const previousField = `${person}PreviouslyMarried`
-    const isPreviouslyMarried = (form[previousField] || '').toLowerCase() === 'yes'
-
-    return (
-      <>
-        <div className="extended-form-grid">
-          {extraInfoFields.map(({ key, label }) => (
-            <div key={`${person}-${key}`} className="field-group">
-              <label>{label}</label>
-              {key === 'previouslyMarried' ? (
-                <select
-                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
-                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
-              ) : (
-                <input
-                  value={form[`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`] ?? ''}
-                  onChange={(e) => updateField(`${person}${key.charAt(0).toUpperCase()}${key.slice(1)}`, e.target.value)}
-                  placeholder={label}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {isPreviouslyMarried && (
-          <div className="dissolution-table-wrap">
-            <div className="dissolution-table-header">If previously married: how was it dissolved?</div>
-            <div className="dissolution-table">
-              <div className="field-group">
-                <label>How was it dissolved?</label>
-                <select
-                  value={form[`${person}DissolutionMethod`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionMethod`, e.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="Death of spouse">Death of spouse</option>
-                  <option value="Annulment">Annulment</option>
-                  <option value="Divorce">Divorce</option>
-                  <option value="Legal separation">Legal separation</option>
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label>Place where dissolved</label>
-                <input
-                  value={form[`${person}DissolutionPlace`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionPlace`, e.target.value)}
-                  placeholder="Place"
-                />
-              </div>
-
-              <div className="field-group">
-                <label>When dissolved</label>
-                <input
-                  value={form[`${person}DissolutionDate`] ?? ''}
-                  onChange={(e) => updateField(`${person}DissolutionDate`, formatDateInput(e.target.value))}
-                  placeholder="MM/DD/YYYY"
-                  maxLength={10}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
-
   const renderGroomBrideForm = () => {
     const firstField = `${person}FirstName`
     const middleField = `${person}MiddleName`
@@ -1263,7 +1156,6 @@ export default function ApplicantRegistration() {
                 <select value={form[civilStatusField]} onChange={(e) => updateField(civilStatusField, e.target.value)}>
                   <option value="">Select</option>
                   <option value="Single">Single</option>
-                  <option value="Married">Married</option>
                   <option value="Divorced">Divorced</option>
                   <option value="Widowed">Widowed</option>
                   <option value="Separated">Separated</option>

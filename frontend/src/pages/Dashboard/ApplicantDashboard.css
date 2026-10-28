@@ -775,11 +775,29 @@
   font-size: 12px;
 }
 
-.applicant-submission-details > div {
+.applicant-detail-card {
   padding: 16px;
   border: 1px solid rgba(125, 136, 168, 0.14);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
+}
+
+.applicant-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.applicant-detail-heading .application-edit-button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.applicant-detail-heading h3 {
+  margin-bottom: 0;
 }
 
 .applicant-submission-details h3 {
@@ -797,11 +815,6 @@
 
 .applicant-submission-details p strong {
   color: #2d3550;
-}
-
-.applicant-submission-details > button {
-  grid-column: 1 / -1;
-  justify-self: end;
 }
 
 .applicant-document-review {
@@ -1895,10 +1908,6 @@
   .applicant-edit-grid,
   .applicant-submission-details {
     grid-template-columns: 1fr;
-  }
-
-  .applicant-submission-details > button {
-    justify-self: stretch;
   }
 
   .applicant-modal-actions {

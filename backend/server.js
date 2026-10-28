@@ -6,7 +6,7 @@ const dns = require('dns2');
 const systemDns = require('node:dns');
 const crypto = require('node:crypto');
 const { promisify } = require('node:util');
-const { buildPrintFormHtml } = require('./printForm');
+const { buildPrintFormHtml, buildPrintFormPdf } = require('./printForm');
 
 // Load environmental variables
 dotenv.config();
@@ -569,6 +569,21 @@ app.get('/api/applications/:id/print', requireRoles(['applicant', 'admin', 'supe
       message: 'Unable to prepare the application print form.',
       ...(process.env.NODE_ENV !== 'production' ? { error: error.message } : {}),
     });
+  }
+});
+
+app.get('/api/applications/:id/print/pdf', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const application = await Application.findById(req.params.id).lean();
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+
+    const printForm = await buildPrintFormPdf(application);
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'inline; filename="marriage-license-application.pdf"');
+    res.type('application/pdf').send(printForm);
+  } catch (error) {
+    console.error('Application PDF print error:', error.message);
+    res.status(500).json({ message: 'Unable to prepare the application print form.' });
   }
 });
 
