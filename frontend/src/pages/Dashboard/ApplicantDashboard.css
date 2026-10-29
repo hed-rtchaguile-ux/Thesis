@@ -401,6 +401,17 @@
   background: #fff7f7;
 }
 
+.applicant-notifications-empty {
+  border-color: rgba(125, 136, 168, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+  color: #6e7895;
+  font-size: 13px;
+}
+
+.applicant-notifications-empty p {
+  margin: 0;
+}
+
 .applicant-notifications-heading {
   display: flex;
   align-items: center;
@@ -466,6 +477,131 @@
 .applicant-notification.read:hover {
   border-color: rgba(125, 136, 168, 0.16);
   background: #f8f9fb;
+}
+
+.notification-inbox {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid rgba(125, 136, 168, 0.16);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.notification-inbox-heading,
+.notification-inbox-item-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notification-inbox-heading h2,
+.notification-inbox-item-heading h3 {
+  margin: 0;
+  color: #2f3751;
+}
+
+.notification-inbox-heading h2 {
+  font-size: 19px;
+}
+
+.notification-inbox-heading p {
+  margin: 5px 0 0;
+  color: #6e7895;
+  font-size: 13px;
+}
+
+.notification-inbox-filters {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(125, 136, 168, 0.14);
+}
+
+.notification-inbox-filters button {
+  border: 1px solid rgba(125, 136, 168, 0.22);
+  border-radius: 999px;
+  padding: 7px 13px;
+  color: #53617f;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notification-inbox-filters button.active {
+  border-color: #53689f;
+  color: #ffffff;
+  background: #53689f;
+}
+
+.notification-inbox-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-inbox-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.notification-inbox-item.unread {
+  border-color: rgba(83, 104, 159, 0.35);
+  background: #f7f9ff;
+}
+
+.notification-inbox-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #53689f;
+}
+
+.notification-inbox-item.read .notification-inbox-indicator {
+  background: #c4cada;
+}
+
+.notification-inbox-item-heading h3 {
+  font-size: 14px;
+}
+
+.notification-inbox-item-heading span {
+  color: #6e7895;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.notification-inbox-copy p {
+  margin: 7px 0;
+  color: #4a536b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.notification-inbox-copy small {
+  color: #7a849a;
+  font-size: 11px;
+}
+
+.notification-inbox-empty,
+.notification-inbox-error {
+  margin: 0;
+  padding: 24px 12px;
+  color: #6e7895;
+  font-size: 13px;
+  text-align: center;
+}
+
+.notification-inbox-error {
+  color: #9b4a4a;
 }
 
 .notification-icon {
@@ -618,6 +754,130 @@
 .application-document-alert strong,
 .document-status-redo {
   color: #9b4a4a;
+}
+
+.application-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  grid-column: 1 / -1;
+  padding: 15px 16px;
+  border: 1px solid #dfe5f1;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8faff 0%, #ffffff 100%);
+}
+
+.application-receipt-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.application-receipt-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: #53689f;
+  background: #e9eef9;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.application-receipt-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.application-receipt-heading strong {
+  color: #1c243d;
+  font-size: 14px;
+}
+
+.application-receipt-description {
+  margin: 0;
+  color: #6e7895;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.application-receipt-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.receipt-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #53689f;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #53689f;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.receipt-upload-button:hover {
+  border-color: #425784;
+  background: #425784;
+}
+
+.receipt-upload-button.uploading {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.receipt-upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.receipt-upload-button:focus-within {
+  outline: 2px solid #9aadd9;
+  outline-offset: 2px;
+}
+
+.receipt-upload-button > span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.receipt-view-link {
+  color: #53689f;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.receipt-view-link:hover {
+  text-decoration: underline;
+}
+
+.application-receipt-hint {
+  color: #6e7895;
+  font-size: 11px;
+}
+
+.application-receipt p {
+  margin: 0;
+  color: #9b4a4a;
+  font-size: 12px;
 }
 
 .applicant-modal-backdrop {
@@ -1803,6 +2063,10 @@
   .application-item {
     grid-template-columns: 1fr;
   }
+
+  .topbar-user {
+    display: none;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1819,14 +2083,6 @@
 
   .topbar-main h1 {
     font-size: 28px;
-  }
-
-  .topbar-user {
-    width: 100%;
-  }
-
-  .user-menu-wrapper {
-    margin-left: auto;
   }
 
   .dashboard-panel {
@@ -1880,6 +2136,29 @@
 
   .applicant-notification {
     grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .notification-inbox {
+    padding: 14px;
+  }
+
+  .notification-inbox-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notification-inbox-item {
+    grid-template-columns: 10px minmax(0, 1fr);
+    align-items: start;
+    padding: 12px;
+  }
+
+  .notification-inbox-item > .application-view-button {
+    grid-column: 2;
+  }
+
+  .notification-inbox-item-heading {
+    align-items: flex-start;
   }
 
   .notification-action {

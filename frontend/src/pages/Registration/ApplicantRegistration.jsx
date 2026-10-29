@@ -889,116 +889,6 @@ export default function ApplicantRegistration() {
     reader.readAsDataURL(selectedFile)
   }
 
-  function autoFillDocuments() {
-    const documentValues = Object.fromEntries(personDocumentFields.map(({ key }) => [key, `${key}.pdf`]))
-
-    setDocuments((current) => ({
-      ...current,
-      ...documentValues,
-    }))
-
-    setValidationErrors((current) => {
-      const nextErrors = { ...current }
-      personDocumentFields.forEach(({ key }) => {
-        delete nextErrors[key]
-      })
-      return nextErrors
-    })
-  }
-
-  function autoFillPersonData(targetPrefix, sourcePrefix) {
-    const isBride = targetPrefix === 'bride'
-    const fallbackValues = {
-      FirstName: isBride ? 'Maria' : 'Juan',
-      MiddleName: isBride ? 'Santos' : 'Reyes',
-      LastName: isBride ? 'Dela Cruz' : 'Cruz',
-      Suffix: '',
-      DobDay: isBride ? '24' : '15',
-      DobMonth: isBride ? '06' : '04',
-      DobYear: isBride ? '1997' : '1994',
-      Gender: isBride ? 'Female' : 'Male',
-      Citizenship: 'Filipino',
-      ResidenceHouseNo: isBride ? '15' : '120',
-      ResidenceStreet: isBride ? 'Lapu-Lapu Street' : 'Mabini Street',
-      Religion: 'Roman Catholic',
-      CivilStatus: 'Single',
-      Mobile: isBride ? '09187654321' : '09171234567',
-      Email: isBride ? 'maria.santos@email.com' : 'juan.cruz@email.com',
-      FatherFirstName: isBride ? 'Mateo' : 'Carlos',
-      FatherMiddleName: isBride ? 'Delos Reyes' : 'Manalo',
-      FatherLastName: isBride ? 'Santos' : 'Cruz',
-      FatherCitizenship: 'Filipino',
-      FatherResidenceHouseNo: isBride ? '18' : '123',
-      FatherResidenceStreet: isBride ? 'Bahayang Street' : 'Mabini Street',
-      MotherMaidenFirstName: isBride ? 'Rosalinda' : 'Carmela',
-      MotherMaidenMiddleName: isBride ? 'Villanueva' : 'Dela Rosa',
-      MotherMaidenLastName: isBride ? 'Santos' : 'Cruz',
-      MotherMaidenCitizenship: 'Filipino',
-      MotherResidenceHouseNo: isBride ? '18' : '123',
-      MotherResidenceStreet: isBride ? 'Bahayang Street' : 'Mabini Street',
-      AdvisorRelationship: 'Godfather',
-      AdvisorName: isBride ? 'Mateo Santos' : 'Carlos Cruz',
-      AdvisorCitizenship: 'Filipino',
-      AdvisorResidenceHouseNo: '9',
-      AdvisorResidenceStreet: 'P. Burgos Street',
-    }
-
-    setForm((current) => {
-      const nextForm = { ...current }
-
-      Object.keys(initialForm).forEach((key) => {
-        if (!key.startsWith(sourcePrefix)) return
-
-        const remainingKey = key.slice(sourcePrefix.length)
-        if (remainingKey === 'Gender') return
-        const targetKey = `${targetPrefix}${remainingKey}`
-
-        if (Object.prototype.hasOwnProperty.call(nextForm, targetKey)) {
-          const sourceValue = current[key]
-          if (sourceValue !== undefined && sourceValue !== null && String(sourceValue).trim() !== '') {
-            nextForm[targetKey] = sourceValue
-          }
-        }
-      })
-
-      Object.keys(fallbackValues).forEach((fieldName) => {
-        const targetKey = `${targetPrefix}${fieldName}`
-        if (Object.prototype.hasOwnProperty.call(nextForm, targetKey)) {
-          const currentValue = nextForm[targetKey]
-          if (!currentValue || String(currentValue).trim() === '') {
-            nextForm[targetKey] = fallbackValues[fieldName]
-          }
-        }
-      })
-      nextForm[`${targetPrefix}Gender`] = isBride ? 'Female' : 'Male'
-
-      const firstName = (nextForm[`${targetPrefix}FirstName`] || '').trim()
-      const lastName = (nextForm[`${targetPrefix}LastName`] || '').trim()
-      const dobDay = nextForm[`${targetPrefix}DobDay`] || ''
-      const dobMonth = nextForm[`${targetPrefix}DobMonth`] || ''
-      const dobYear = nextForm[`${targetPrefix}DobYear`] || ''
-      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
-
-      nextForm[`${targetPrefix}FullName`] = fullName
-      nextForm[`${targetPrefix}Dob`] = [dobDay, dobMonth, dobYear].filter(Boolean).join('/')
-
-      if (dobDay && dobMonth && dobYear) {
-        const birthDate = new Date(Number(dobYear), Number(dobMonth) - 1, Number(dobDay))
-        const today = new Date()
-        let age = today.getFullYear() - birthDate.getFullYear()
-        const monthDiff = today.getMonth() - birthDate.getMonth()
-
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-          age -= 1
-        }
-
-        nextForm[`${targetPrefix}Age`] = age
-      }
-
-      return nextForm
-    })
-  }
-
   const renderGroomBrideForm = () => {
     const firstField = `${person}FirstName`
     const middleField = `${person}MiddleName`
@@ -1042,15 +932,8 @@ export default function ApplicantRegistration() {
       <>
         <div className="two-box-layout">
           <div className="formal-box">
-            <div className="auto-fill-row">
+            <div className="registration-section-title-row">
               <div className="formal-box-title">1. {personStepLabels[personStep - 1]}</div>
-              <button
-                type="button"
-                className="auto-fill-button"
-                onClick={() => autoFillPersonData(person, person === 'groom' ? 'bride' : 'groom')}
-              >
-                Auto Fill
-              </button>
             </div>
 
             {personStep === 1 && <>
@@ -1395,11 +1278,8 @@ export default function ApplicantRegistration() {
 
   const renderDocumentUpload = (fields, title) => (
     <div className="document-upload-wrapper">
-      <div className="auto-fill-row document-auto-fill-row">
+      <div className="registration-section-title-row">
         <div className="formal-box-title">{title}</div>
-        <button type="button" className="auto-fill-button" onClick={autoFillDocuments}>
-          Auto Fill
-        </button>
       </div>
 
       <div className="document-grid">

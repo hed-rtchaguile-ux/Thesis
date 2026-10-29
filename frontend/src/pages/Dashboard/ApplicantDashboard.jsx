@@ -1,24 +1,13 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
 import { printExcelForm } from './printExcelForm'
+import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
 import './ApplicantDashboard.css'
-
-function formatAppointmentDate(value, time = '') {
-  if (!value || value === 'To be assigned by office') return 'None'
-
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
-  return time ? `${formattedDate} at ${time}` : formattedDate
-}
-
-function formatDocumentName(key) {
-  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
-}
 
 export default function ApplicantDashboard() {
   const { user, logout } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const displayName = user?.name || 'User'
   const firstName = displayName.split(' ')[0]
@@ -33,6 +22,9 @@ export default function ApplicantDashboard() {
   const [editDocuments, setEditDocuments] = useState({})
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [receiptUploads, setReceiptUploads] = useState({})
+  const [receiptErrors, setReceiptErrors] = useState({})
+  const handledNotificationRef = useRef('')
 
   function getFlaggedDocuments(applicationRecord) {
     return Object.entries(applicationRecord.documentReviews || {}).filter(([, status]) => status === 'Needs Redo').map(([key]) => key)
@@ -50,7 +42,7 @@ export default function ApplicantDashboard() {
       setApplication({
         status: latestApplication?.status || 'No applications',
         items: fetchedApplications.length,
-        appointment: formatAppointmentDate(latestApplication?.appointmentDate, latestApplication?.appointmentTime),
+        appointment: formatNotificationDate(latestApplication?.appointmentDate, latestApplication?.appointmentTime),
       })
     }
 
@@ -64,80 +56,14 @@ export default function ApplicantDashboard() {
     return () => window.clearInterval(refreshTimer)
   }, [user.email])
 
-  const applicantNotifications = applications.flatMap((applicationRecord) => {
-    const coupleNames = [applicationRecord.groomFullName, applicationRecord.brideFullName].filter(Boolean).join(' & ') || 'your application'
-    const notificationReads = applicationRecord.notificationReads || {}
-    const notifications = []
-
-    if (!notificationReads.appointment && applicationRecord.appointmentDate && applicationRecord.appointmentDate !== 'To be assigned by office') {
-      notifications.push({
-        id: `${applicationRecord._id}-appointment`,
-        notificationKey: 'appointment',
-        application: applicationRecord,
-        editing: false,
-        action: 'View appointment',
-        message: `Your appointment for ${coupleNames} is scheduled for ${formatAppointmentDate(applicationRecord.appointmentDate, applicationRecord.appointmentTime)}.`,
-      })
-    }
-
-    if (applicationRecord.secondAppointmentDate && !notificationReads.secondAppointment) {
-      notifications.push({
-        id: `${applicationRecord._id}-second-appointment`,
-        notificationKey: 'secondAppointment',
-        application: applicationRecord,
-        editing: false,
-        action: 'View counseling appointment',
-        message: `Your second appointment for counseling is set for ${formatAppointmentDate(applicationRecord.secondAppointmentDate, applicationRecord.secondAppointmentTime)}.`,
-      })
-    }
-
-    if (!notificationReads.rejected && applicationRecord.status === 'Rejected') {
-      notifications.push({
-        id: `${applicationRecord._id}-rejected`,
-        notificationKey: 'rejected',
-        application: applicationRecord,
-        editing: true,
-        action: 'Update',
-        message: `Your application for ${coupleNames} was rejected. Please review and update it before submitting again.`,
-      })
-    }
-
-    if (applicationRecord.licenseReleaseDate && !notificationReads.licenseRelease) {
-      notifications.push({
-        id: `${applicationRecord._id}-license-release`,
-        notificationKey: 'licenseRelease',
-        application: applicationRecord,
-        editing: false,
-        action: 'View release date',
-        message: `Your marriage license is scheduled for release on ${formatAppointmentDate(applicationRecord.licenseReleaseDate)}.`,
-      })
-    }
-
-    getFlaggedDocuments(applicationRecord).forEach((documentKey) => {
-      const notificationKey = `redo-${documentKey}`
-      if (notificationReads[notificationKey]) return
-      const reviewNote = applicationRecord.documentReviewNotes?.[documentKey]
-      notifications.push({
-        id: `${applicationRecord._id}-${documentKey}-redo`,
-        notificationKey,
-        application: applicationRecord,
-        editing: true,
-        action: 'Update',
-        message: reviewNote
-          ? `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}. Reviewer note: ${reviewNote}`
-          : `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}.`,
-      })
-    })
-
-    return notifications
-  })
+  const applicantNotifications = getApplicantNotifications(applications, true)
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
 
-  function getEditableApplicationData(applicationRecord) {
+  const getEditableApplicationData = useCallback((applicationRecord) => {
     const applicationData = applicationRecord.applicationData
     if (!applicationData || typeof applicationData !== 'object' || Array.isArray(applicationData)) {
       return {
@@ -183,17 +109,73 @@ export default function ApplicantDashboard() {
       paymentMethod: applicationRecord.paymentMethod || applicationData.paymentMethod || '',
       paymentAmount: applicationRecord.paymentAmount || applicationData.paymentAmount || '',
     }
-  }
+  }, [])
 
-  function openApplication(applicationRecord, editing = false) {
+  const openApplication = useCallback((applicationRecord, editing = false) => {
     setSelectedApplication(applicationRecord)
     setEditingSection(editing ? 'groom' : '')
     setEditError('')
     setEditForm(getEditableApplicationData(applicationRecord))
     setEditDocuments(applicationRecord.documents || {})
+  }, [getEditableApplicationData])
+
+  async function uploadPaymentReceipt(applicationRecord, event) {
+    const input = event.target
+    const file = input.files?.[0]
+    if (!file) return
+
+    setReceiptErrors((currentErrors) => ({ ...currentErrors, [applicationRecord._id]: '' }))
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setReceiptErrors((currentErrors) => ({
+        ...currentErrors,
+        [applicationRecord._id]: 'Choose a JPEG, PNG, or PDF receipt.',
+      }))
+      input.value = ''
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setReceiptErrors((currentErrors) => ({
+        ...currentErrors,
+        [applicationRecord._id]: 'The receipt must be no larger than 5 MB.',
+      }))
+      input.value = ''
+      return
+    }
+
+    setReceiptUploads((currentUploads) => ({ ...currentUploads, [applicationRecord._id]: true }))
+    try {
+      const receipt = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('Unable to read the selected receipt.'))
+        reader.readAsDataURL(file)
+      })
+      const response = await apiFetch(`/api/applications/${applicationRecord._id}/payment-receipt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receipt }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Unable to upload the receipt.')
+
+      setApplications((currentApplications) => currentApplications.map((item) => (
+        item._id === result._id ? result : item
+      )))
+      setSelectedApplication((currentApplication) => (
+        currentApplication?._id === result._id ? result : currentApplication
+      ))
+    } catch (error) {
+      setReceiptErrors((currentErrors) => ({
+        ...currentErrors,
+        [applicationRecord._id]: error.message || 'Unable to upload the receipt.',
+      }))
+    } finally {
+      setReceiptUploads((currentUploads) => ({ ...currentUploads, [applicationRecord._id]: false }))
+      input.value = ''
+    }
   }
 
-  async function openNotification(notification) {
+  const openNotification = useCallback(async (notification) => {
     openApplication(notification.application, notification.editing)
     if (notification.notificationKey.startsWith('redo-')) setEditingSection('documents')
     try {
@@ -206,7 +188,27 @@ export default function ApplicantDashboard() {
     } catch {
       // The notification remains visible after the next refresh if it could not be acknowledged.
     }
-  }
+  }, [openApplication])
+
+  useEffect(() => {
+    const requestedNotification = location.state?.notificationToOpen
+    if (!requestedNotification) {
+      handledNotificationRef.current = ''
+      return
+    }
+    if (applicationsStatus !== 'ready') return
+
+    const requestId = `${requestedNotification.applicationId}:${requestedNotification.notificationKey}`
+    if (handledNotificationRef.current === requestId) return
+    handledNotificationRef.current = requestId
+
+    const applicationRecord = applications.find((item) => item._id === requestedNotification.applicationId)
+    const notification = applicationRecord
+      ? getApplicantNotifications([applicationRecord]).find((item) => item.notificationKey === requestedNotification.notificationKey)
+      : null
+    if (notification) openNotification(notification)
+    navigate('/applicant/dashboard', { replace: true, state: null })
+  }, [applications, applicationsStatus, location.state, navigate, openNotification])
 
   async function saveApplicationEdit(event) {
     event.preventDefault()
@@ -395,6 +397,12 @@ export default function ApplicantDashboard() {
                   }}>
                     Profile
                   </button>
+                  <button type="button" className="dropdown-item" onClick={() => {
+                    setMenuOpen(false)
+                    navigate('/applicant/notifications')
+                  }}>
+                    Notifications
+                  </button>
                   <button type="button" className="dropdown-item danger" onClick={() => {
                     setMenuOpen(false)
                     handleLogout()
@@ -416,8 +424,14 @@ export default function ApplicantDashboard() {
             </div>
           </div>
 
-          {applicantNotifications.length > 0 && (
-            <section className="applicant-notifications" aria-live="polite" aria-label="Application updates">
+          <section
+            id="notifications"
+            className={`applicant-notifications ${applicantNotifications.length === 0 ? 'applicant-notifications-empty' : ''}`}
+            aria-live="polite"
+            aria-label="Application updates"
+          >
+            {applicantNotifications.length > 0 ? (
+              <>
               <div className="applicant-notifications-heading">
                 <div><span className="application-label">Action needed</span><h3>Application updates</h3></div>
                 <span className="notification-count">{applicantNotifications.length}</span>
@@ -431,8 +445,11 @@ export default function ApplicantDashboard() {
                   </button>
                 ))}
               </div>
-            </section>
-          )}
+              </>
+            ) : (
+              <p>No new notifications.</p>
+            )}
+          </section>
 
           <div className="summary-grid">
             <article className="summary-card">
@@ -488,17 +505,51 @@ export default function ApplicantDashboard() {
                       </div>
                       <div>
                         <span className="application-label">Appointment</span>
-                        <strong>{formatAppointmentDate(item.appointmentDate, item.appointmentTime)}</strong>
+                        <strong>{formatNotificationDate(item.appointmentDate, item.appointmentTime)}</strong>
                       </div>
                       {item.secondAppointmentDate && (
                         <div>
                           <span className="application-label">Counseling appointment</span>
-                          <strong>{formatAppointmentDate(item.secondAppointmentDate, item.secondAppointmentTime)}</strong>
+                          <strong>{formatNotificationDate(item.secondAppointmentDate, item.secondAppointmentTime)}</strong>
                         </div>
                       )}
                       {getFlaggedDocuments(item).length > 0 && <div className="application-document-alert"><span className="application-label">Document action</span><strong>{getFlaggedDocuments(item).length} document(s) need redo</strong></div>}
+                      <div className="application-receipt">
+                        <div className="application-receipt-heading">
+                          <span className="application-receipt-icon" aria-hidden="true">₱</span>
+                          <div>
+                            <span className="application-label">Over-the-counter payment</span>
+                            <strong>Payment receipt</strong>
+                          </div>
+                        </div>
+                        <p className="application-receipt-description">
+                          {item.paymentReceipt
+                            ? 'Your receipt is saved. You can upload a replacement if needed.'
+                            : 'Upload a photo or PDF of your official payment receipt.'}
+                        </p>
+                        <div className="application-receipt-controls">
+                          <label className={`receipt-upload-button ${receiptUploads[item._id] ? 'uploading' : ''}`}>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,application/pdf"
+                              disabled={Boolean(receiptUploads[item._id])}
+                              onChange={(event) => uploadPaymentReceipt(item, event)}
+                            />
+                            <span aria-hidden="true">{receiptUploads[item._id] ? '◌' : '↑'}</span>
+                            {receiptUploads[item._id] ? 'Uploading...' : item.paymentReceipt ? 'Replace receipt' : 'Choose receipt'}
+                          </label>
+                          {item.paymentReceipt && (
+                            <a className="receipt-view-link" href={item.paymentReceipt} target="_blank" rel="noreferrer">
+                              View uploaded receipt
+                            </a>
+                          )}
+                        </div>
+                        <small className="application-receipt-hint">JPEG, PNG, or PDF · Maximum 5 MB</small>
+                        {receiptErrors[item._id] && <p role="alert">{receiptErrors[item._id]}</p>}
+                      </div>
                       <div className="application-actions">
                         <button type="button" className="application-view-button" onClick={() => openApplication(item)}>View submission</button>
+                        <button type="button" className="application-view-button" onClick={() => printExcelForm(item._id)}>Print form</button>
                         <button type="button" className="application-edit-button" onClick={() => openApplication(item, true)}>Edit information</button>
                       </div>
                     </div>
@@ -577,14 +628,14 @@ export default function ApplicantDashboard() {
                     </form>
                   ) : (
                     <>
-                      <p><strong>Preferred date:</strong> {formatAppointmentDate(selectedApplication.preferredAppointmentDate)}</p>
+                      <p><strong>Preferred date:</strong> {formatNotificationDate(selectedApplication.preferredAppointmentDate)}</p>
                       <p><strong>Preferred time:</strong> {selectedApplication.preferredAppointmentTime || 'Not provided'}</p>
-                      <p><strong>Scheduled date:</strong> {formatAppointmentDate(selectedApplication.appointmentDate)}</p>
+                      <p><strong>Scheduled date:</strong> {formatNotificationDate(selectedApplication.appointmentDate)}</p>
                       <p><strong>Scheduled time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p>
                       <p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p>
                       <p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p>
-                      <p><strong>Counseling appointment:</strong> {selectedApplication.secondAppointmentDate ? formatAppointmentDate(selectedApplication.secondAppointmentDate, selectedApplication.secondAppointmentTime) : 'Not scheduled'}</p>
-                      <p><strong>Marriage license release:</strong> {selectedApplication.licenseReleaseDate ? formatAppointmentDate(selectedApplication.licenseReleaseDate) : 'Not announced'}</p>
+                      <p><strong>Counseling appointment:</strong> {selectedApplication.secondAppointmentDate ? formatNotificationDate(selectedApplication.secondAppointmentDate, selectedApplication.secondAppointmentTime) : 'Not scheduled'}</p>
+                      <p><strong>Marriage license release:</strong> {selectedApplication.licenseReleaseDate ? formatNotificationDate(selectedApplication.licenseReleaseDate) : 'Not announced'}</p>
                     </>
                   )}
                 </section>

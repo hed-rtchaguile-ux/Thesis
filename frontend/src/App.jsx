@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import logoImage from './assets/wedrings-mark.png'
 import { AuthProvider } from './pages/AuthContext'
+import { useAuth } from './pages/auth'
 import ApplicantDashboard from './pages/Dashboard/ApplicantDashboard'
+import NotificationsInbox from './pages/Dashboard/NotificationsInbox.jsx'
 import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
 import ApplicantProfile from './pages/ApplicantProfile'
 import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
@@ -15,23 +17,20 @@ import ProtectedRoute from './pages/ProtectedRoute'
 function ApplicantLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [atlasStatus, setAtlasStatus] = useState('checking')
-
-  useEffect(() => {
-    fetch('/api/status')
-      .then((response) => {
-        if (!response.ok) throw new Error('Unable to check backend status')
-        return response.json()
-      })
-      .then(({ atlasConnected }) => setAtlasStatus(atlasConnected ? 'connected' : 'unavailable'))
-      .catch(() => setAtlasStatus('unavailable'))
-  }, [])
+  const { user, logout } = useAuth()
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const displayName = user?.name || 'Applicant'
+  const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
 
   const sidebarItems = [
     { label: 'My Appointment', route: '/applicant/dashboard', icon: '⌂' },
-    { label: 'Notifications', route: '/applicant/dashboard#notifications', icon: '◉' },
     { label: 'New Application', route: '/applicant/registration', icon: '✎' },
   ]
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="app-shell">
@@ -41,13 +40,37 @@ function ApplicantLayout() {
             <img src={logoImage} alt="WedRings logo" className="brand-logo" />
           </span>
           <span className="brand-name">WEDRINGS</span>
+          <div className="applicant-sidebar-account">
+            <div className="applicant-sidebar-avatar">{initials}</div>
+            <span className="applicant-sidebar-name">{displayName}</span>
+            <button
+              type="button"
+              className="applicant-sidebar-account-toggle"
+              aria-label="Open account menu"
+              aria-expanded={accountMenuOpen}
+              onClick={() => setAccountMenuOpen((open) => !open)}
+            >
+              ▾
+            </button>
+            {accountMenuOpen && (
+              <div className="applicant-sidebar-account-menu" role="menu" aria-label="Account actions">
+                <button type="button" role="menuitem" onClick={() => {
+                  setAccountMenuOpen(false)
+                  navigate('/applicant/profile')
+                }}>Profile</button>
+                <button type="button" role="menuitem" onClick={() => {
+                  setAccountMenuOpen(false)
+                  navigate('/applicant/notifications')
+                }}>Notifications</button>
+                <button type="button" role="menuitem" onClick={handleLogout}>Logout</button>
+              </div>
+            )}
+          </div>
         </div>
 
         <nav className="sidebar-nav" aria-label="Applicant navigation">
           {sidebarItems.map((item) => {
-            const active = item.label === 'Notifications'
-              ? location.pathname === '/applicant/dashboard' && location.hash === '#notifications'
-              : location.pathname === item.route && !location.hash
+            const active = location.pathname === item.route && !location.hash
 
             return (
               <button
@@ -62,18 +85,6 @@ function ApplicantLayout() {
             )
           })}
         </nav>
-
-        <div className={`atlas-status atlas-status-${atlasStatus}`} role="status">
-          <span className="atlas-status-dot" aria-hidden="true" />
-          <span>
-            <strong>Atlas Database</strong>
-            <small>
-              {atlasStatus === 'checking' && 'Checking connection...'}
-              {atlasStatus === 'connected' && 'Connected'}
-              {atlasStatus === 'unavailable' && 'Unavailable'}
-            </small>
-          </span>
-        </div>
 
       </aside>
 
@@ -100,6 +111,7 @@ function App() {
         <Route element={<ProtectedRoute role="applicant" />}>
           <Route element={<ApplicantLayout />}>
             <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
+            <Route path="/applicant/notifications" element={<NotificationsInbox />} />
             <Route path="/applicant/profile" element={<ApplicantProfile />} />
             <Route path="/applicant/registration" element={<ApplicantRegistration />} />
           </Route>
@@ -107,6 +119,7 @@ function App() {
 
         <Route element={<ProtectedRoute roles={['admin', 'superadmin']} />}>
           <Route path="/admin/dashboard" element={<SuperAdminDashboard isAdmin />} />
+          <Route path="/admin/profile" element={<ApplicantProfile />} />
           <Route path="/admin/verified-records" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/all-applications" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/new-submissions" element={<Navigate to="/admin/dashboard" replace />} />
@@ -116,6 +129,7 @@ function App() {
 
         <Route element={<ProtectedRoute role="superadmin" />}>
           <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
+          <Route path="/superadmin/profile" element={<ApplicantProfile />} />
           <Route path="/superadmin/appointments" element={<SuperAdminDashboard />} />
           <Route path="/superadmin/reports" element={<SuperAdminDashboard />} />
         </Route>

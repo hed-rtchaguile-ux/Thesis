@@ -25,6 +25,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const basePath = isAdmin ? '/admin' : '/superadmin'
   const displayName = user?.name || 'User'
   const firstName = displayName.split(' ')[0]
@@ -132,18 +133,6 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
           </button>
           <button type="button" className={`nav-item ${isReportsPage ? 'active' : ''}`} onClick={() => navigate(`${basePath}/reports`)}><span className="nav-icon" aria-hidden="true">▤</span><span>Reports</span></button>
         </nav>
-
-        <button
-          type="button"
-          className="logout-button"
-          onClick={() => {
-            logout()
-            navigate('/login')
-          }}
-        >
-          <span className="nav-icon" aria-hidden="true">⎋</span>
-          <span>Logout</span>
-        </button>
       </aside>
 
       <section className="applicant-main" id="admin-dashboard-top">
@@ -154,9 +143,46 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
           </div>
 
           <div className="topbar-user">
-            <div className="user-avatar">{initials}</div>
-            <span>{displayName}</span>
-            <button type="button" className="mini-button" aria-label="Open user menu">▾</button>
+            <div className="user-menu-wrapper">
+              <button
+                type="button"
+                className="admin-account-trigger"
+                aria-label={`Open account menu for ${displayName}`}
+                aria-expanded={accountMenuOpen}
+                onClick={() => setAccountMenuOpen((open) => !open)}
+              >
+                <span className="user-avatar">{initials}</span>
+                <span>{displayName}</span>
+                <span className="admin-user-caret" aria-hidden="true">▾</span>
+              </button>
+              {accountMenuOpen && (
+                <div className="user-dropdown" role="menu" aria-label="Account actions">
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountMenuOpen(false)
+                      navigate(`${basePath}/profile`)
+                    }}
+                  >
+                    Profile
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item danger"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountMenuOpen(false)
+                      logout()
+                      navigate('/login', { replace: true })
+                    }}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 

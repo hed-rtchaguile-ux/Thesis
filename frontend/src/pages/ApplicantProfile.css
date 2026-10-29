@@ -76,6 +76,10 @@
   margin-top: 22px;
 }
 
+.staff-profile-page .profile-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .info-panel {
   padding: 18px;
   border: 1px solid rgba(96, 108, 140, 0.12);
@@ -176,6 +180,82 @@
   color: #2b3148;
 }
 
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.change-password-panel {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid rgba(96, 108, 140, 0.14);
+  border-radius: 14px;
+  background: #fafbff;
+}
+
+.change-password-heading h3 {
+  margin: 0;
+  color: #2e3754;
+  font-size: 18px;
+}
+
+.change-password-heading p {
+  margin: 6px 0 0;
+  color: #66708d;
+  font-size: 13px;
+}
+
+.change-password-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.change-password-form label {
+  display: grid;
+  gap: 7px;
+  color: #3c4662;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.change-password-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid rgba(96, 108, 140, 0.24);
+  border-radius: 8px;
+  color: #2a3150;
+  background: #ffffff;
+  font-size: 14px;
+}
+
+.change-password-form input:focus {
+  border-color: #53689f;
+  outline: 2px solid rgba(83, 104, 159, 0.15);
+}
+
+.change-password-form .primary-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.change-password-error,
+.change-password-success {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.change-password-error {
+  color: #9b3f3f;
+}
+
+.change-password-success {
+  color: #32734b;
+}
+
 @media (max-width: 680px) {
   .profile-header,
   .profile-summary,
@@ -185,6 +265,10 @@
   }
 
   .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .change-password-form {
     grid-template-columns: 1fr;
   }
 }

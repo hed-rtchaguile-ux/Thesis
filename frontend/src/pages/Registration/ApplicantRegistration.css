@@ -439,10 +439,10 @@
   padding: 16px;
 }
 
-.auto-fill-row {
+.registration-section-title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -454,21 +454,6 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-}
-
-.auto-fill-button {
-  border: 1px solid rgba(92, 115, 168, 0.35);
-  background: rgba(237, 242, 255, 0.9);
-  color: #3f5178;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.auto-fill-button:hover {
-  background: rgba(223, 233, 255, 1);
 }
 
 .three-col {
@@ -900,6 +885,12 @@
   .official-bottom-boxes,
   .official-info-bar {
     grid-template-columns: 1fr;
+  }
+
+  @media (max-width: 980px) {
+    .registration-account-menu {
+      display: none;
+    }
   }
 
   .official-form-two-col,

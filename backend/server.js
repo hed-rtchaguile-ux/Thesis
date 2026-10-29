@@ -7,7 +7,7 @@ const systemDns = require('node:dns');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { buildPrintFormHtml } = require('./printForm');
+const { buildPrintFormPdf } = require('./printForm');
 
 // Load environmental variables
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -30,7 +30,7 @@ const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.A
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
 const scrypt = promisify(crypto.scrypt);
 const passwordResetRequestWindows = new Map();
-const registrationCodeRequestWindows = new Map();
+const registrationRequestWindows = new Map();
 
 let dnsRecords;
 
@@ -78,6 +78,7 @@ const applicationSchema = new mongoose.Schema({
   secondAppointmentTime: String,
   paymentMethod: String,
   paymentAmount: String,
+  paymentReceipt: String,
   applicationData: mongoose.Schema.Types.Mixed,
   documents: { type: Map, of: String },
   documentReviews: { type: Map, of: String },
@@ -94,6 +95,8 @@ const accountSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   passwordResetTokenHash: String,
   passwordResetExpiresAt: Date,
+  passwordResetCodeHash: String,
+  passwordResetCodeAttempts: { type: Number, default: 0 },
   role: { type: String, required: true, enum: ['applicant', 'admin', 'superadmin'] },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -103,22 +106,6 @@ const ApplicantAccount = mongoose.model('ApplicantAccount', accountSchema, 'appl
 const AdminAccount = mongoose.model('AdminAccount', accountSchema, 'admin_accounts');
 const SuperAdminAccount = mongoose.model('SuperAdminAccount', accountSchema, 'superadmin_accounts');
 const accountModels = { applicant: ApplicantAccount, admin: AdminAccount, superadmin: SuperAdminAccount };
-const registrationVerificationSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, lowercase: true, trim: true },
-  passwordHash: { type: String, required: true },
-  codeHash: { type: String, required: true },
-  expiresAt: { type: Date, required: true },
-  attempts: { type: Number, default: 0 },
-}, { timestamps: true });
-registrationVerificationSchema.index({ email: 1 }, { unique: true });
-registrationVerificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-const RegistrationVerification = mongoose.model(
-  'RegistrationVerification',
-  registrationVerificationSchema,
-  'registration_verifications',
-);
-
 // Applying the CORS options const
 const corsOptions = {
   origin: ALLOWED_FRONTEND_ORIGIN,
@@ -155,6 +142,14 @@ function isRateLimited(requestWindows, key, limit, windowMilliseconds) {
 
 function isPasswordResetRateLimited(ipAddress) {
   return isRateLimited(passwordResetRequestWindows, ipAddress, 5, 15 * 60 * 1000);
+}
+
+function isDatabaseUnavailable(res, action) {
+  if (mongoose.connection.readyState === 1) return false;
+  res.status(503).json({
+    message: `${action} is temporarily unavailable because the database is disconnected. Please try again later.`,
+  });
+  return true;
 }
 
 async function hashPassword(password) {
@@ -250,7 +245,7 @@ async function initializeDemoAccounts() {
   }
 }
 
-app.post('/api/auth/register/request-code', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const name = String(req.body.name || '').trim();
     const email = String(req.body.email || '').trim().toLowerCase();
@@ -265,18 +260,14 @@ app.post('/api/auth/register/request-code', async (req, res) => {
       return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
     }
     if (!APP_AUTH_TOKEN_SECRET) {
-      return res.status(503).json({ message: 'Email verification is not configured.' });
+      return res.status(503).json({ message: 'Account registration is not configured.' });
     }
-
-    const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-    if (!smtpConfigured) {
-      return res.status(503).json({ message: 'Email verification is unavailable. Configure Gmail SMTP in the backend environment.' });
-    }
+    if (isDatabaseUnavailable(res, 'Account registration')) return;
 
     const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
-    if (isRateLimited(registrationCodeRequestWindows, `ip:${ipAddress}`, 5, 15 * 60 * 1000)
-      || isRateLimited(registrationCodeRequestWindows, `email:${email}`, 3, 15 * 60 * 1000)) {
-      return res.status(429).json({ message: 'Too many verification code requests. Please try again later.' });
+    if (isRateLimited(registrationRequestWindows, `ip:${ipAddress}`, 5, 15 * 60 * 1000)
+      || isRateLimited(registrationRequestWindows, `email:${email}`, 3, 15 * 60 * 1000)) {
+      return res.status(429).json({ message: 'Too many account registration attempts. Please try again later.' });
     }
 
     const accountExists = await Promise.all([
@@ -288,94 +279,13 @@ app.post('/api/auth/register/request-code', async (req, res) => {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
-    const code = String(crypto.randomInt(100000, 1000000));
-    const codeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest('hex');
-    const verification = await RegistrationVerification.findOneAndUpdate(
-      { email },
-      {
-        $set: {
-          name,
-          email,
-          passwordHash: await hashPassword(password),
-          codeHash,
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-          attempts: 0,
-        },
-      },
-      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
-    );
-
-    const nodemailer = require('nodemailer');
-    const port = Number(process.env.SMTP_PORT || 587);
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port,
-      secure: process.env.SMTP_SECURE === 'true' || port === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-    try {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: email,
-        subject: 'Verify your WedRings account',
-        text: `Your WedRings verification code is ${code}. It expires in 10 minutes.`,
-        html: `<p>Your WedRings verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</p><p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>`,
-      });
-    } catch (error) {
-      await RegistrationVerification.deleteOne({ _id: verification._id, codeHash });
-      throw error;
-    }
-
-    res.set('Cache-Control', 'no-store');
-    res.json({ message: 'Verification code sent. Check your email.' });
-  } catch (error) {
-    if (error.code === 11000) return res.status(409).json({ message: 'An account with this email already exists.' });
-    console.error('Applicant registration verification email failed:', error.message);
-    res.status(503).json({ message: 'Unable to send the verification code. Check the email settings and try again.' });
-  }
-});
-
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const email = String(req.body.email || '').trim().toLowerCase();
-    const code = String(req.body.code || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Enter a valid email address.' });
-    }
-    if (!/^\d{6}$/.test(code)) {
-      return res.status(400).json({ message: 'Enter the 6-digit verification code.' });
-    }
-
-    const verification = await RegistrationVerification.findOne({
-      email,
-      expiresAt: { $gt: new Date() },
-      attempts: { $lt: 5 },
-    });
-    if (!verification) {
-      return res.status(400).json({ message: 'The verification code is invalid or expired. Request a new code.' });
-    }
-
-    const expectedHash = Buffer.from(verification.codeHash, 'hex');
-    const submittedHash = Buffer.from(
-      crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest('hex'),
-      'hex',
-    );
-    if (expectedHash.length !== submittedHash.length || !crypto.timingSafeEqual(expectedHash, submittedHash)) {
-      await RegistrationVerification.updateOne(
-        { _id: verification._id, attempts: { $lt: 5 } },
-        { $inc: { attempts: 1 } },
-      );
-      return res.status(400).json({ message: 'The verification code is incorrect.' });
-    }
-
     const applicant = await ApplicantAccount.create({
-      name: verification.name,
-      email: verification.email,
-      passwordHash: verification.passwordHash,
+      name,
+      email,
+      passwordHash: await hashPassword(password),
       role: 'applicant',
       isActive: true,
     });
-    await RegistrationVerification.deleteOne({ _id: verification._id });
     res.set('Cache-Control', 'no-store');
     res.status(201).json({
       token: createAccessToken(applicant),
@@ -383,12 +293,13 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ message: 'An account with this email already exists.' });
-    console.error('Applicant account verification failed:', error.message);
+    console.error('Applicant account registration failed:', error.message);
     res.status(500).json({ message: 'Unable to create the applicant account.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (isDatabaseUnavailable(res, 'Sign-in')) return;
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
@@ -409,7 +320,45 @@ app.post('/api/auth/login', async (req, res) => {
       user: { id: account._id.toString(), name: account.name, email: account.email, role: account.role },
     });
   } catch (error) {
+    console.error('Sign-in failed:', error.message);
     res.status(500).json({ message: 'Unable to sign in.' });
+  }
+});
+
+app.put('/api/auth/change-password', requireRoles(['applicant', 'admin', 'superadmin']), async (req, res) => {
+  const currentPassword = String(req.body.currentPassword || '');
+  const newPassword = String(req.body.newPassword || '');
+
+  if (!currentPassword) {
+    return res.status(400).json({ message: 'Enter your current password.' });
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    return res.status(400).json({ message: 'New password must be between 8 and 128 characters.' });
+  }
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ message: 'Your new password must be different from your current password.' });
+  }
+  if (isDatabaseUnavailable(res, 'Password change')) return;
+
+  try {
+    const Account = accountModels[req.user.role];
+    const account = await Account.findOne({ _id: req.user.id, isActive: { $ne: false } });
+    if (!account || !await verifyPassword(currentPassword, account.passwordHash)) {
+      return res.status(400).json({ message: 'Your current password is incorrect.' });
+    }
+
+    account.passwordHash = await hashPassword(newPassword);
+    account.passwordResetTokenHash = undefined;
+    account.passwordResetExpiresAt = undefined;
+    account.passwordResetCodeHash = undefined;
+    account.passwordResetCodeAttempts = 0;
+    await account.save();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ message: 'Your password has been changed successfully.' });
+  } catch (error) {
+    console.error('Account password change failed:', error.message);
+    res.status(500).json({ message: 'Unable to change your password.' });
   }
 });
 
@@ -418,12 +367,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ message: 'Enter a valid email address.' });
   }
+  if (isDatabaseUnavailable(res, 'Password recovery')) return;
   if (isPasswordResetRateLimited(req.ip || req.socket.remoteAddress || 'unknown')) {
     return res.status(429).json({ message: 'Too many reset requests. Please try again later.' });
   }
 
   const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-  if (process.env.NODE_ENV === 'production' && !smtpConfigured) {
+  if (!smtpConfigured && process.env.NODE_ENV === 'production') {
     return res.status(503).json({ message: 'Password reset is temporarily unavailable. Please contact support.' });
   }
   if (!APP_AUTH_TOKEN_SECRET) {
@@ -431,18 +381,27 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 
   try {
-    const applicant = await ApplicantAccount.findOne({ email });
-    const responseBody = { message: 'If an account exists for that email, password reset instructions are available.' };
-    if (!applicant) return res.json(responseBody);
+    let account;
+    for (const role of ['applicant', 'admin', 'superadmin']) {
+      account = await accountModels[role].findOne({ email });
+      if (account) break;
+    }
+    const responseBody = {
+      message: 'If an account exists for that email, a verification code will be sent shortly.',
+      developmentVerificationCodeLogged: !smtpConfigured,
+    };
+    if (!account) {
+      res.set('Cache-Control', 'no-store');
+      return res.json(responseBody);
+    }
 
-    const token = crypto.randomBytes(32).toString('hex');
-    applicant.passwordResetTokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(token).digest('hex');
-    applicant.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    await applicant.save();
+    const code = String(crypto.randomInt(100000, 1000000));
+    account.passwordResetCodeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest('hex');
+    account.passwordResetCodeAttempts = 0;
+    account.passwordResetTokenHash = undefined;
+    account.passwordResetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await account.save();
 
-    const frontendUrl = process.env.FRONTEND_URL || ALLOWED_FRONTEND_ORIGIN;
-    const resetUrl = new URL('/reset-password', frontendUrl);
-    resetUrl.searchParams.set('token', token);
     if (smtpConfigured) {
       const nodemailer = require('nodemailer');
       const port = Number(process.env.SMTP_PORT || 587);
@@ -454,21 +413,67 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       });
       await transporter.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: applicant.email,
-        subject: 'Reset your WedRings password',
-        text: `Use this link to reset your password. It expires in 30 minutes: ${resetUrl}`,
-        html: `<p>This link expires in 30 minutes.</p><p><a href="${resetUrl}">Reset password</a></p>`,
+        to: account.email,
+        subject: 'Your WedRings password reset code',
+        text: `Your password reset verification code is ${code}. It expires in 10 minutes.`,
+        html: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
       });
     } else {
-      console.info(`Development password reset link: ${resetUrl}`);
-      responseBody.developmentResetLinkLogged = true;
+      console.info(`Development password reset code for ${email}: ${code}`);
     }
 
     res.set('Cache-Control', 'no-store');
     res.json(responseBody);
   } catch (error) {
     console.error('Applicant password reset request failed:', error.message);
-    res.status(500).json({ message: 'Unable to process the password reset request.' });
+    res.status(500).json({ message: 'Unable to send the verification code. Please try again later.' });
+  }
+});
+
+app.post('/api/auth/verify-reset-code', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const code = String(req.body.code || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ message: 'Enter the email address and six-digit verification code.' });
+  }
+  if (!APP_AUTH_TOKEN_SECRET) return res.status(503).json({ message: 'Password recovery is not configured.' });
+  if (isDatabaseUnavailable(res, 'Password reset')) return;
+
+  try {
+    let account;
+    for (const role of ['applicant', 'admin', 'superadmin']) {
+      account = await accountModels[role].findOne({ email });
+      if (account) break;
+    }
+    if (!account || !account.passwordResetCodeHash || !account.passwordResetExpiresAt
+      || account.passwordResetExpiresAt <= new Date() || account.passwordResetCodeAttempts >= 5) {
+      return res.status(400).json({ message: 'The verification code is invalid or expired. Request a new code and try again.' });
+    }
+
+    const suppliedCodeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest();
+    const expectedCodeHash = Buffer.from(account.passwordResetCodeHash, 'hex');
+    if (expectedCodeHash.length !== suppliedCodeHash.length || !crypto.timingSafeEqual(expectedCodeHash, suppliedCodeHash)) {
+      account.passwordResetCodeAttempts = (account.passwordResetCodeAttempts || 0) + 1;
+      if (account.passwordResetCodeAttempts >= 5) {
+        account.passwordResetCodeHash = undefined;
+        account.passwordResetExpiresAt = undefined;
+      }
+      await account.save();
+      return res.status(400).json({ message: 'The verification code is invalid or expired. Request a new code and try again.' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    account.passwordResetTokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(resetToken).digest('hex');
+    account.passwordResetCodeHash = undefined;
+    account.passwordResetCodeAttempts = 0;
+    account.passwordResetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await account.save();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ resetToken, message: 'Verification successful. Choose a new password.' });
+  } catch (error) {
+    console.error('Password reset code verification failed:', error.message);
+    res.status(500).json({ message: 'Unable to verify the code. Please try again later.' });
   }
 });
 
@@ -482,22 +487,30 @@ app.post('/api/auth/reset-password', async (req, res) => {
     return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
   }
   if (!APP_AUTH_TOKEN_SECRET) return res.status(503).json({ message: 'Password recovery is not configured.' });
+  if (isDatabaseUnavailable(res, 'Password reset')) return;
 
   try {
     const tokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(token).digest('hex');
-    const applicant = await ApplicantAccount.findOne({
-      passwordResetTokenHash: tokenHash,
-      passwordResetExpiresAt: { $gt: new Date() },
-    });
-    if (!applicant) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
+    let account;
+    for (const role of ['applicant', 'admin', 'superadmin']) {
+      account = await accountModels[role].findOne({
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { $gt: new Date() },
+      });
+      if (account) break;
+    }
+    if (!account) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
 
-    applicant.passwordHash = await hashPassword(password);
-    applicant.passwordResetTokenHash = undefined;
-    applicant.passwordResetExpiresAt = undefined;
-    await applicant.save();
+    account.passwordHash = await hashPassword(password);
+    account.passwordResetTokenHash = undefined;
+    account.passwordResetExpiresAt = undefined;
+    account.passwordResetCodeHash = undefined;
+    account.passwordResetCodeAttempts = 0;
+    await account.save();
     res.set('Cache-Control', 'no-store');
     res.json({ message: 'Your password has been reset. You can now log in.' });
   } catch (error) {
+    console.error('Password reset failed:', error.message);
     res.status(500).json({ message: 'Unable to reset the password.' });
   }
 });
@@ -609,6 +622,12 @@ mongoose.connect(DATABASE_CONNECTION_STRING, {
   })
   .catch((error) => {
     console.error('MongoDB connection error:', error.message);
+    const serverErrors = [...(error.reason?.servers?.values() || [])]
+      .map((server) => server.error?.message)
+      .filter(Boolean);
+    if (serverErrors.length > 0) {
+      console.error('MongoDB connection details:', [...new Set(serverErrors)].join('; '));
+    }
     console.error('Please verify the Atlas cluster is running and your IP is whitelisted.');
   });
 
@@ -689,9 +708,10 @@ app.get('/api/applications/:id/print', requireRoles(['applicant', 'admin', 'supe
       return res.status(404).json({ message: 'Application not found.' });
     }
 
-    const printForm = await buildPrintFormHtml(application);
+    const printForm = await buildPrintFormPdf(application);
     res.set('Cache-Control', 'no-store');
-    res.type('html').send(printForm);
+    res.set('Content-Disposition', 'inline; filename="marriage-license-application.pdf"');
+    res.type('application/pdf').send(printForm);
   } catch (error) {
     console.error('Application print form error:', error.message);
     res.status(500).json({
@@ -701,13 +721,48 @@ app.get('/api/applications/:id/print', requireRoles(['applicant', 'admin', 'supe
   }
 });
 
+app.put('/api/applications/:id/payment-receipt', requireRoles(['applicant']), async (req, res) => {
+  try {
+    if (isDatabaseUnavailable(res, 'Payment receipt upload')) return;
+
+    const receipt = req.body.receipt;
+    const receiptMatch = typeof receipt === 'string'
+      ? /^data:(image\/(?:jpeg|png)|application\/pdf);base64,([A-Za-z0-9+/]+={0,2})$/.exec(receipt)
+      : null;
+    if (!receiptMatch) {
+      return res.status(400).json({ message: 'Upload a JPEG, PNG, or PDF receipt.' });
+    }
+
+    const receiptData = Buffer.from(receiptMatch[2], 'base64');
+    if (receiptData.length === 0 || receiptData.length > 5 * 1024 * 1024
+      || receiptData.toString('base64') !== receiptMatch[2]) {
+      return res.status(400).json({ message: 'The receipt must be no larger than 5 MB.' });
+    }
+
+    const application = await Application.findOneAndUpdate(
+      { _id: req.params.id, applicantEmail: req.user.email },
+      { $set: { paymentReceipt: receipt } },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) {
+      return res.status(404).json({ message: 'Application not found.' });
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json(application);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to save the payment receipt.', error: error.message });
+  }
+});
+
 app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) => {
   try {
     if (req.params.id === 'appointments') {
       return res.status(404).json({ message: 'Appointment scheduling is disabled.' });
     }
 
-    const protectedFields = new Set(['_id', 'status', 'appointmentDate', 'appointmentTime', 'appointmentLocation', 'secondAppointmentDate', 'secondAppointmentTime', 'applicantEmail', 'createdAt', 'updatedAt']);
+    const protectedFields = new Set(['_id', 'status', 'appointmentDate', 'appointmentTime', 'appointmentLocation', 'secondAppointmentDate', 'secondAppointmentTime', 'paymentReceipt', 'applicantEmail', 'createdAt', 'updatedAt']);
     const editableFields = Object.fromEntries(
       Object.entries(req.body).filter(([key]) => !protectedFields.has(key)),
     );
