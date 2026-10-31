@@ -32,6 +32,11 @@ export default function PasswordRecoveryPage({ mode }) {
     setError('')
     setMessage('')
 
+    if (step === 'email' && !email.trim().toLowerCase().endsWith('@gmail.com')) {
+      setError('Enter the Gmail address associated with your account, ending in @gmail.com.')
+      return
+    }
+
     if (step === 'password' && password !== confirmPassword) {
       setError('New password and confirmation do not match.')
       return
@@ -125,8 +130,10 @@ export default function PasswordRecoveryPage({ mode }) {
                   <label htmlFor="recovery-email">Email Address</label>
                   <input
                     id="recovery-email"
-                    type="email"
-                    placeholder="you@example.com"
+                    type="text"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    placeholder="you@gmail.com"
                     autoComplete="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}

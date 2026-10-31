@@ -253,8 +253,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (name.length < 2 || name.length > 100) {
       return res.status(400).json({ message: 'Enter a name between 2 and 100 characters.' });
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Enter a valid email address.' });
+    if (!/^[^\s@]+@gmail\.com$/.test(email)) {
+      return res.status(400).json({ message: 'Use a Gmail address ending in @gmail.com.' });
     }
     if (password.length < 8 || password.length > 128) {
       return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
@@ -364,8 +364,8 @@ app.put('/api/auth/change-password', requireRoles(['applicant', 'admin', 'supera
 
 app.post('/api/auth/forgot-password', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: 'Enter a valid email address.' });
+  if (!/^[^\s@]+@gmail\.com$/.test(email)) {
+    return res.status(400).json({ message: 'Enter the Gmail address associated with your account.' });
   }
   if (isDatabaseUnavailable(res, 'Password recovery')) return;
   if (isPasswordResetRateLimited(req.ip || req.socket.remoteAddress || 'unknown')) {
@@ -382,9 +382,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
   try {
     let account;
+    let accountRole;
     for (const role of ['applicant', 'admin', 'superadmin']) {
       account = await accountModels[role].findOne({ email });
-      if (account) break;
+      if (account) {
+        accountRole = role;
+        break;
+      }
     }
     const responseBody = {
       message: 'If an account exists for that email, a verification code will be sent shortly.',
@@ -396,11 +400,16 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 
     const code = String(crypto.randomInt(100000, 1000000));
-    account.passwordResetCodeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest('hex');
-    account.passwordResetCodeAttempts = 0;
-    account.passwordResetTokenHash = undefined;
-    account.passwordResetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await account.save();
+    const resetCodeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest('hex');
+    const Account = accountModels[accountRole];
+    await Account.updateOne({ _id: account._id }, {
+      $set: {
+        passwordResetCodeHash: resetCodeHash,
+        passwordResetCodeAttempts: 0,
+        passwordResetExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+      $unset: { passwordResetTokenHash: 1 },
+    });
 
     if (smtpConfigured) {
       const nodemailer = require('nodemailer');
@@ -425,25 +434,41 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(responseBody);
   } catch (error) {
-    console.error('Applicant password reset request failed:', error.message);
-    res.status(500).json({ message: 'Unable to send the verification code. Please try again later.' });
+    const errorCode = error.code || error.name || 'RESET_REQUEST_ERROR';
+    console.error('Password reset request failed:', JSON.stringify({
+      code: errorCode,
+      command: error.command || '',
+      responseCode: error.responseCode || '',
+    }));
+    const message = errorCode === 'EAUTH'
+      ? 'Google rejected the app sender login. Check SMTP_USER and use a Google App Password in SMTP_PASS.'
+      : ['EENVELOPE', 'EMESSAGE'].includes(errorCode)
+        ? 'Gmail rejected the sender or recipient address. Check SMTP_FROM and the account email.'
+        : ['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'EDNS'].includes(errorCode)
+          ? `The app could not connect to Gmail (${errorCode}). Check network access and the SMTP host/port settings.`
+          : `Unable to send or save the verification code (${errorCode}). Please try again later.`;
+    res.status(500).json({ message });
   }
 });
 
 app.post('/api/auth/verify-reset-code', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const code = String(req.body.code || '').trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(code)) {
-    return res.status(400).json({ message: 'Enter the email address and six-digit verification code.' });
+  if (!/^[^\s@]+@gmail\.com$/.test(email) || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ message: 'Enter the Gmail address and six-digit verification code.' });
   }
   if (!APP_AUTH_TOKEN_SECRET) return res.status(503).json({ message: 'Password recovery is not configured.' });
   if (isDatabaseUnavailable(res, 'Password reset')) return;
 
   try {
     let account;
+    let accountRole;
     for (const role of ['applicant', 'admin', 'superadmin']) {
       account = await accountModels[role].findOne({ email });
-      if (account) break;
+      if (account) {
+        accountRole = role;
+        break;
+      }
     }
     if (!account || !account.passwordResetCodeHash || !account.passwordResetExpiresAt
       || account.passwordResetExpiresAt <= new Date() || account.passwordResetCodeAttempts >= 5) {
@@ -452,22 +477,40 @@ app.post('/api/auth/verify-reset-code', async (req, res) => {
 
     const suppliedCodeHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(`${email}:${code}`).digest();
     const expectedCodeHash = Buffer.from(account.passwordResetCodeHash, 'hex');
+    const Account = accountModels[accountRole];
     if (expectedCodeHash.length !== suppliedCodeHash.length || !crypto.timingSafeEqual(expectedCodeHash, suppliedCodeHash)) {
-      account.passwordResetCodeAttempts = (account.passwordResetCodeAttempts || 0) + 1;
-      if (account.passwordResetCodeAttempts >= 5) {
-        account.passwordResetCodeHash = undefined;
-        account.passwordResetExpiresAt = undefined;
+      const attempts = (account.passwordResetCodeAttempts || 0) + 1;
+      if (attempts >= 5) {
+        await Account.updateOne({ _id: account._id, passwordResetCodeHash: account.passwordResetCodeHash }, {
+          $set: { passwordResetCodeAttempts: attempts },
+          $unset: { passwordResetCodeHash: 1, passwordResetExpiresAt: 1 },
+        });
+      } else {
+        await Account.updateOne({ _id: account._id, passwordResetCodeHash: account.passwordResetCodeHash }, {
+          $set: { passwordResetCodeAttempts: attempts },
+        });
       }
-      await account.save();
       return res.status(400).json({ message: 'The verification code is invalid or expired. Request a new code and try again.' });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    account.passwordResetTokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(resetToken).digest('hex');
-    account.passwordResetCodeHash = undefined;
-    account.passwordResetCodeAttempts = 0;
-    account.passwordResetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await account.save();
+    const resetTokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(resetToken).digest('hex');
+    const updated = await Account.updateOne({
+      _id: account._id,
+      passwordResetCodeHash: account.passwordResetCodeHash,
+      passwordResetCodeAttempts: { $lt: 5 },
+      passwordResetExpiresAt: { $gt: new Date() },
+    }, {
+      $set: {
+        passwordResetTokenHash: resetTokenHash,
+        passwordResetCodeAttempts: 0,
+        passwordResetExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+      $unset: { passwordResetCodeHash: 1 },
+    });
+    if (!updated.matchedCount) {
+      return res.status(400).json({ message: 'The verification code is invalid or expired. Request a new code and try again.' });
+    }
 
     res.set('Cache-Control', 'no-store');
     res.json({ resetToken, message: 'Verification successful. Choose a new password.' });
@@ -491,22 +534,26 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
   try {
     const tokenHash = crypto.createHmac('sha256', APP_AUTH_TOKEN_SECRET).update(token).digest('hex');
-    let account;
+    const passwordHash = await hashPassword(password);
+    let updated = false;
     for (const role of ['applicant', 'admin', 'superadmin']) {
-      account = await accountModels[role].findOne({
+      const result = await accountModels[role].updateOne({
         passwordResetTokenHash: tokenHash,
         passwordResetExpiresAt: { $gt: new Date() },
+      }, {
+        $set: { passwordHash, passwordResetCodeAttempts: 0 },
+        $unset: {
+          passwordResetTokenHash: 1,
+          passwordResetExpiresAt: 1,
+          passwordResetCodeHash: 1,
+        },
       });
-      if (account) break;
+      if (result.matchedCount) {
+        updated = true;
+        break;
+      }
     }
-    if (!account) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
-
-    account.passwordHash = await hashPassword(password);
-    account.passwordResetTokenHash = undefined;
-    account.passwordResetExpiresAt = undefined;
-    account.passwordResetCodeHash = undefined;
-    account.passwordResetCodeAttempts = 0;
-    await account.save();
+    if (!updated) return res.status(400).json({ message: 'This password reset link is invalid or has expired.' });
     res.set('Cache-Control', 'no-store');
     res.json({ message: 'Your password has been reset. You can now log in.' });
   } catch (error) {

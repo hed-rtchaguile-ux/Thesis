@@ -20,6 +20,11 @@ export default function ApplicantSignup() {
     event.preventDefault()
     setError('')
 
+    if (!email.trim().toLowerCase().endsWith('@gmail.com')) {
+      setError('Enter your Gmail address, ending in @gmail.com.')
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.')
       return
@@ -64,7 +69,7 @@ export default function ApplicantSignup() {
             <input id="signup-name" type="text" autoComplete="name" minLength={2} maxLength={100} value={name} onChange={(event) => setName(event.target.value)} required />
 
             <label htmlFor="signup-email">Email Address</label>
-            <input id="signup-email" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <input id="signup-email" type="text" inputMode="email" autoCapitalize="none" placeholder="you@gmail.com" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
 
             <label htmlFor="signup-password">Password</label>
             <input id="signup-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
