@@ -40,6 +40,35 @@ async function sendEmail(application, title, message) {
   }
   if (recipients.length === 0) throw new Error('No applicant email addresses are available.');
 
+  if (process.env.BREVO_API_KEY && process.env.SENDER_EMAIL) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: process.env.SENDER_NAME || 'WedRings',
+          email: process.env.SENDER_EMAIL,
+        },
+        to: recipients.map((email) => ({ email })),
+        subject: `WedRings: ${title}`,
+        textContent: message,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.message || `Brevo email request failed with status ${response.status}.`);
+    }
+    return;
+  }
+
+  if (process.env.VERCEL) {
+    throw new Error('BREVO_API_KEY and SENDER_EMAIL must be configured on Vercel.');
+  }
+
   const transporter = getEmailTransporter();
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
