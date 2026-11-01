@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
+import DocumentPreview from './DocumentPreview'
 import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
 import './ApplicantDashboard.css'
@@ -24,6 +25,9 @@ export default function ApplicantDashboard() {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [receiptUploads, setReceiptUploads] = useState({})
   const [receiptErrors, setReceiptErrors] = useState({})
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState({})
+  const [deletionRequests, setDeletionRequests] = useState({})
+  const [deletionRequestErrors, setDeletionRequestErrors] = useState({})
   const handledNotificationRef = useRef('')
 
   function getFlaggedDocuments(applicationRecord) {
@@ -61,6 +65,28 @@ export default function ApplicantDashboard() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  async function requestApplicationDeletion(applicationRecord) {
+    if (!window.confirm('Request deletion of this application? It will remain active until an admin approves the request.')) return
+
+    setDeletionRequests((current) => ({ ...current, [applicationRecord._id]: true }))
+    setDeletionRequestErrors((current) => ({ ...current, [applicationRecord._id]: '' }))
+    try {
+      const response = await apiFetch(`/api/applications/${applicationRecord._id}/deletion-request`, {
+        method: 'POST',
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Unable to request application deletion.')
+      setApplications((current) => current.map((item) => item._id === result._id ? result : item))
+    } catch (error) {
+      setDeletionRequestErrors((current) => ({
+        ...current,
+        [applicationRecord._id]: error.message || 'Unable to request application deletion.',
+      }))
+    } finally {
+      setDeletionRequests((current) => ({ ...current, [applicationRecord._id]: false }))
+    }
   }
 
   const getEditableApplicationData = useCallback((applicationRecord) => {
@@ -503,6 +529,12 @@ export default function ApplicantDashboard() {
                         <span className="application-label">Status</span>
                         <strong>{item.status || 'For Review'}</strong>
                       </div>
+                      {item.deletionRequestStatus && (
+                        <div>
+                          <span className="application-label">Deletion request</span>
+                          <strong>{item.deletionRequestStatus === 'Pending' ? 'Awaiting admin approval' : 'Not approved'}</strong>
+                        </div>
+                      )}
                       <div>
                         <span className="application-label">Appointment</span>
                         <strong>{formatNotificationDate(item.appointmentDate, item.appointmentTime)}</strong>
@@ -539,11 +571,24 @@ export default function ApplicantDashboard() {
                             {receiptUploads[item._id] ? 'Uploading...' : item.paymentReceipt ? 'Replace receipt' : 'Choose receipt'}
                           </label>
                           {item.paymentReceipt && (
-                            <a className="receipt-view-link" href={item.paymentReceipt} target="_blank" rel="noreferrer">
-                              View uploaded receipt
-                            </a>
+                            <button
+                              type="button"
+                              className="receipt-view-link"
+                              aria-expanded={Boolean(receiptPreviewOpen[item._id])}
+                              onClick={() => setReceiptPreviewOpen((current) => ({
+                                ...current,
+                                [item._id]: !current[item._id],
+                              }))}
+                            >
+                              {receiptPreviewOpen[item._id] ? 'Hide receipt' : 'View uploaded receipt'}
+                            </button>
                           )}
                         </div>
+                        {item.paymentReceipt && receiptPreviewOpen[item._id] && (
+                          <div className="application-receipt-preview">
+                            <DocumentPreview label="Uploaded payment receipt" value={item.paymentReceipt} />
+                          </div>
+                        )}
                         <small className="application-receipt-hint">JPEG, PNG, or PDF · Maximum 5 MB</small>
                         {receiptErrors[item._id] && <p role="alert">{receiptErrors[item._id]}</p>}
                       </div>
@@ -551,6 +596,23 @@ export default function ApplicantDashboard() {
                         <button type="button" className="application-view-button" onClick={() => openApplication(item)}>View submission</button>
                         <button type="button" className="application-view-button" onClick={() => printExcelForm(item._id)}>Print form</button>
                         <button type="button" className="application-edit-button" onClick={() => openApplication(item, true)}>Edit information</button>
+                        <button
+                          type="button"
+                          className="application-deletion-request-button"
+                          onClick={() => void requestApplicationDeletion(item)}
+                          disabled={Boolean(deletionRequests[item._id]) || item.deletionRequestStatus === 'Pending'}
+                        >
+                          {deletionRequests[item._id]
+                            ? 'Sending request...'
+                            : item.deletionRequestStatus === 'Pending'
+                              ? 'Deletion request pending'
+                              : item.deletionRequestStatus === 'Rejected'
+                                ? 'Request deletion again'
+                                : 'Request deletion'}
+                        </button>
+                        {deletionRequestErrors[item._id] && (
+                          <p className="application-deletion-request-error" role="alert">{deletionRequestErrors[item._id]}</p>
+                        )}
                       </div>
                     </div>
                   )
@@ -559,17 +621,19 @@ export default function ApplicantDashboard() {
             )}
           </div>
 
-          <div className="quick-actions">
-            <h3>Quick Actions</h3>
-            <button type="button" className="quick-action-btn" onClick={() => navigate('/applicant/registration')}>
-              <span className="quick-icon" aria-hidden="true">✎</span>
-              <span>
-                <strong>Start New Application</strong>
-                <small>Begin your marriage registration process.</small>
-              </span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </button>
-          </div>
+          {applications.length === 0 && applicationsStatus === 'ready' && (
+            <div className="quick-actions">
+              <h3>Quick Actions</h3>
+              <button type="button" className="quick-action-btn" onClick={() => navigate('/applicant/registration')}>
+                <span className="quick-icon" aria-hidden="true">✎</span>
+                <span>
+                  <strong>Start New Application</strong>
+                  <small>Begin your marriage registration process.</small>
+                </span>
+                <span className="arrow" aria-hidden="true">›</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {selectedApplication && (

@@ -716,6 +716,7 @@
 .application-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   grid-column: 1 / -1;
 }
@@ -741,6 +742,39 @@
 .application-edit-button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+
+.application-deletion-request-button {
+  padding: 8px 10px;
+  border: 1px solid #d5a5a5;
+  border-radius: 6px;
+  color: #8d3939;
+  background: #fff8f8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.application-deletion-request-button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.application-deletion-request-error {
+  flex-basis: 100%;
+}
+
+.application-eligibility-message {
+  padding: 22px;
+}
+
+.deletion-request-badge {
+  color: #9b4a4a !important;
+  font-weight: 700;
+}
+
+.deletion-request-review-actions {
+  margin-top: 10px;
 }
 
 .application-document-alert {
@@ -859,14 +893,31 @@
 }
 
 .receipt-view-link {
+  padding: 0;
+  border: 0;
   color: #53689f;
+  background: transparent;
   font-size: 12px;
   font-weight: 700;
-  text-decoration: none;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .receipt-view-link:hover {
   text-decoration: underline;
+}
+
+.application-receipt-preview {
+  width: 100%;
+}
+
+.application-receipt-preview .document-preview-image {
+  max-width: min(100%, 720px);
+  max-height: 560px;
+}
+
+.application-receipt-preview .document-preview-pdf object {
+  width: min(100%, 720px);
 }
 
 .application-receipt-hint {
@@ -2075,6 +2126,10 @@
     padding: 16px 14px 24px;
   }
 
+  .applicant-shell {
+    width: 100%;
+  }
+
   .topbar {
     flex-direction: column;
     align-items: flex-start;
@@ -2123,6 +2178,42 @@
   .application-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .application-receipt {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  .application-receipt-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .receipt-upload-button,
+  .receipt-view-link {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .application-receipt-preview,
+  .application-receipt-preview .document-preview-image-link {
+    width: 100%;
+  }
+
+  .application-receipt-preview .document-preview-image {
+    width: 100%;
+    max-width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+  }
+
+  .application-receipt-preview .document-preview-pdf object {
+    width: 100%;
+    height: min(60vh, 420px);
   }
 
   .applicant-notifications {

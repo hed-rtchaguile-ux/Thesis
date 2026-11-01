@@ -4,6 +4,7 @@ import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
+import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
@@ -251,6 +252,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
                       <small>{application.applicantEmail}</small>
                       {!isAppointmentsPage && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
+                      {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                     </div>
                     <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
                     {isAppointmentsPage && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
@@ -284,6 +286,14 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
             updatingDocumentKey={updatingDocumentKey}
             onDocumentReview={updateDocumentReview}
             onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+            onDeletionReviewed={(result) => {
+              if (result.deleted) {
+                setApplications((currentApplications) => currentApplications.filter((item) => item._id !== result.applicationId))
+                setSelectedApplicationId('')
+              } else {
+                setApplications((currentApplications) => currentApplications.map((item) => item._id === result.application._id ? result.application : item))
+              }
+            }}
           />
           </section>
         </div>
@@ -292,7 +302,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   )
 }
 
-function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview, onAppointmentSaved }) {
+function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed }) {
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
@@ -308,6 +318,13 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
+      <div className="admin-details-group">
+        <h4>Over-the-counter payment receipt</h4>
+        {application.paymentReceipt
+          ? <DocumentPreview label="Payment receipt" value={application.paymentReceipt} />
+          : <p>Not uploaded</p>}
+      </div>
+      <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>

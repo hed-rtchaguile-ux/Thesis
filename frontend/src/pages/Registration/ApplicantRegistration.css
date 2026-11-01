@@ -191,6 +191,30 @@
   color: #7e1d1d;
 }
 
+.registration-form-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.registration-autofill-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px dashed #7f8dbd;
+  border-radius: 7px;
+  color: #53689f;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.registration-autofill-button:hover {
+  background: #f2f5ff;
+}
+
 .user-avatar {
   display: grid;
   place-items: center;

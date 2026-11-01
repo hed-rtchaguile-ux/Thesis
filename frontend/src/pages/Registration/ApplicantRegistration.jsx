@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAllMunicipalities, getAllProvinces, getBarangaysByMunicipality, getMunicipalitiesByProvince } from '@aivangogh/ph-address'
 import { apiFetch, useAuth } from '../auth'
@@ -87,6 +87,21 @@ function getLocationFields(field) {
     city: `${locationBase}City`,
     barangay: `${locationBase}Barangay`,
   }
+}
+
+function validateLocationFields(errors, form, locationBase, required = false) {
+  const fields = [
+    { field: `${locationBase}Country`, message: 'Select a country.' },
+    { field: `${locationBase}Province`, message: 'Select a province or state.' },
+    { field: `${locationBase}City`, message: 'Select a city or municipality.' },
+  ]
+  const hasLocationValue = fields.some(({ field }) => String(form[field] || '').trim())
+
+  if (!required && !hasLocationValue) return
+
+  fields.forEach(({ field, message }) => {
+    if (!String(form[field] || '').trim()) errors[field] = message
+  })
 }
 
 function getApplicantDocumentFields(form, applicant) {
@@ -317,6 +332,81 @@ function getLocalDateInputValue() {
   return localDate.toISOString().slice(0, 10)
 }
 
+function getSampleApplicantFields(prefix, details) {
+  const birthDate = `${details.birthMonth}/${details.birthDay}/${details.birthYear}`
+  const fullName = `${details.firstName} ${details.middleName} ${details.lastName}`
+  const residence = `123 Sample Street, Agtangao, Bangued, Abra, Philippines`
+  const relativeResidence = (relative) => ({
+    [`${prefix}${relative}ResidenceHouseNo`]: '123',
+    [`${prefix}${relative}ResidenceStreet`]: 'Sample Street',
+    [`${prefix}${relative}ResidenceBarangay`]: 'Agtangao',
+    [`${prefix}${relative}ResidenceCity`]: 'Bangued',
+    [`${prefix}${relative}ResidenceProvince`]: 'Abra',
+    [`${prefix}${relative}ResidenceCountry`]: 'Philippines',
+  })
+
+  return {
+    [`${prefix}FirstName`]: details.firstName,
+    [`${prefix}MiddleName`]: details.middleName,
+    [`${prefix}LastName`]: details.lastName,
+    [`${prefix}Suffix`]: '',
+    [`${prefix}DobDay`]: details.birthDay,
+    [`${prefix}DobMonth`]: details.birthMonth,
+    [`${prefix}DobYear`]: details.birthYear,
+    [`${prefix}Age`]: '25',
+    [`${prefix}BirthPlaceCity`]: 'Bangued',
+    [`${prefix}BirthPlaceProvince`]: 'Abra',
+    [`${prefix}BirthPlaceCountry`]: 'Philippines',
+    [`${prefix}Citizenship`]: 'Filipino',
+    [`${prefix}ResidenceHouseNo`]: '123',
+    [`${prefix}ResidenceStreet`]: 'Sample Street',
+    [`${prefix}ResidenceBarangay`]: 'Agtangao',
+    [`${prefix}ResidenceCity`]: 'Bangued',
+    [`${prefix}ResidenceProvince`]: 'Abra',
+    [`${prefix}ResidenceCountry`]: 'Philippines',
+    [`${prefix}Religion`]: 'Christian',
+    [`${prefix}CivilStatus`]: 'Single',
+    [`${prefix}FullName`]: fullName,
+    [`${prefix}Dob`]: birthDate,
+    [`${prefix}Mobile`]: details.mobile,
+    [`${prefix}Email`]: details.email,
+    [`${prefix}PlaceOfBirth`]: 'Bangued, Abra, Philippines',
+    [`${prefix}Residence`]: residence,
+    [`${prefix}FatherName`]: 'Sample Father',
+    [`${prefix}MotherMaidenName`]: 'Sample Mother',
+    [`${prefix}FatherFirstName`]: 'Sample',
+    [`${prefix}FatherMiddleName`]: 'Parent',
+    [`${prefix}FatherLastName`]: 'Father',
+    [`${prefix}FatherCitizenship`]: 'Filipino',
+    ...relativeResidence('Father'),
+    [`${prefix}MotherMaidenFirstName`]: 'Sample',
+    [`${prefix}MotherMaidenMiddleName`]: 'Parent',
+    [`${prefix}MotherMaidenLastName`]: 'Mother',
+    [`${prefix}MotherMaidenCitizenship`]: 'Filipino',
+    ...relativeResidence('Mother'),
+    [`${prefix}AdvisorName`]: 'Sample Advisor',
+    [`${prefix}AdvisorRelationship`]: 'Parent',
+    [`${prefix}AdvisorCitizenship`]: 'Filipino',
+    ...relativeResidence('Advisor'),
+    [`${prefix}PreviouslyMarried`]: 'No',
+    [`${prefix}DissolutionMethod`]: '',
+    [`${prefix}DissolutionPlace`]: '',
+    [`${prefix}DissolutionDate`]: '',
+    [`${prefix}DissolutionCity`]: '',
+    [`${prefix}DissolutionProvince`]: '',
+    [`${prefix}DissolutionCountry`]: '',
+    [`${prefix}DissolutionDay`]: '',
+    [`${prefix}DissolutionMonth`]: '',
+    [`${prefix}DissolutionYear`]: '',
+    [`${prefix}DegreeRelationship`]: 'Not related',
+    [`${prefix}DateOfMarriage`]: '',
+    [`${prefix}Occupation`]: 'Sample occupation',
+    [`${prefix}ContactNumber`]: details.mobile,
+    [`${prefix}ParentConsent`]: 'Sample parental advice',
+    [`${prefix}Declaration`]: 'Sample information for testing only.',
+  }
+}
+
 function FieldError({ message }) {
   return message ? <span className="field-error" role="alert">{message}</span> : null
 }
@@ -330,6 +420,7 @@ export default function ApplicantRegistration() {
   const [step, setStep] = useState(1)
   const [personStep, setPersonStep] = useState(1)
   const [form, setForm] = useState(initialForm)
+  const [applicationEligibility, setApplicationEligibility] = useState('checking')
   const [customDropdownFields, setCustomDropdownFields] = useState({})
   const [documents, setDocuments] = useState({})
   const [countryMetadata, setCountryMetadata] = useState(null)
@@ -365,9 +456,100 @@ export default function ApplicantRegistration() {
   const personDocumentFields = person === 'groom' ? groomDocumentFields : brideDocumentFields
   const allDocumentFields = [...groomDocumentFields, ...brideDocumentFields]
 
+  useEffect(() => {
+    let active = true
+    apiFetch('/api/applications')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to verify whether this account can apply.')
+        return response.json()
+      })
+      .then((records) => {
+        if (active) setApplicationEligibility(records.length > 0 ? 'blocked' : 'available')
+      })
+      .catch(() => {
+        if (active) setApplicationEligibility('error')
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function checkApplicationEligibility() {
+    setApplicationEligibility('checking')
+    try {
+      const response = await apiFetch('/api/applications')
+      if (!response.ok) throw new Error('Unable to verify whether this account can apply.')
+      const records = await response.json()
+      setApplicationEligibility(records.length > 0 ? 'blocked' : 'available')
+    } catch {
+      setApplicationEligibility('error')
+    }
+  }
+
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
+  }
+
+  async function autofillRegistration() {
+    if (!window.confirm('Replace the current form entries with sample information and sample documents? Do not submit this test application.')) {
+      return
+    }
+
+    await loadCountryMetadata()
+    const sampleForm = {
+      ...initialForm,
+      ...getSampleApplicantFields('groom', {
+        firstName: 'Alex',
+        middleName: 'Sample',
+        lastName: 'Applicant',
+        birthMonth: '01',
+        birthDay: '15',
+        birthYear: '2001',
+        mobile: '09123456789',
+        email: 'groom@example.com',
+      }),
+      ...getSampleApplicantFields('bride', {
+        firstName: 'Jamie',
+        middleName: 'Sample',
+        lastName: 'Applicant',
+        birthMonth: '02',
+        birthDay: '20',
+        birthYear: '2001',
+        mobile: '09987654321',
+        email: 'bride@example.com',
+      }),
+      appointmentDate: (() => {
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const localDate = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000)
+        return localDate.toISOString().slice(0, 10)
+      })(),
+      appointmentTime: '09:00',
+      appointmentLocation: 'Villaverde',
+      paymentMethod: 'Cash',
+      paymentAmount: '₱ 800.00',
+    }
+    const sampleImage = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420"><rect width="640" height="420" fill="#f3f5fa"/><rect x="24" y="24" width="592" height="372" rx="16" fill="white" stroke="#53689f" stroke-width="4"/><text x="320" y="190" text-anchor="middle" font-family="Arial" font-size="32" fill="#53689f">SAMPLE ONLY</text><text x="320" y="238" text-anchor="middle" font-family="Arial" font-size="20" fill="#53689f">NOT A REAL DOCUMENT</text></svg>')}`
+    const sampleDocuments = [
+      ...getApplicantDocumentFields(sampleForm, 'groom'),
+      ...getApplicantDocumentFields(sampleForm, 'bride'),
+    ]
+
+    setForm(sampleForm)
+    setDocuments(Object.fromEntries(sampleDocuments.map(({ key }) => [
+      key,
+      { name: `SAMPLE-${key}.svg`, type: 'image/svg+xml', dataUrl: sampleImage },
+    ])))
+    setCustomDropdownFields({})
+    setValidationErrors({})
+    setSubmitError('')
+    setStep(1)
+    setPersonStep(1)
+    Object.values(fileInputRefs.current).forEach((input) => {
+      if (input) input.value = ''
+    })
   }
 
   async function loadCountryMetadata() {
@@ -553,6 +735,7 @@ export default function ApplicantRegistration() {
           id={field}
           value={selectedValue}
           disabled={isDisabled}
+          aria-invalid={Boolean(validationErrors[field])}
           onChange={(event) => {
             const selectingOther = event.target.value === '__other'
             setCustomDropdownFields((currentFields) => ({ ...currentFields, [field]: selectingOther }))
@@ -607,6 +790,7 @@ export default function ApplicantRegistration() {
             onChange={(event) => updateField(field, event.target.value)}
             placeholder={`Enter ${label.toLowerCase()}`}
             aria-label={`Other ${label.toLowerCase()}`}
+            aria-invalid={Boolean(validationErrors[field])}
           />
         )}
       </div>
@@ -749,6 +933,7 @@ export default function ApplicantRegistration() {
     if (currentPersonStep === 2) {
       if (getAgeFromDob(prefix) === null) errors[`${prefix}Dob`] = 'Enter a valid past date.'
       if (!form[`${prefix}Gender`]) errors[`${prefix}Gender`] = 'Select a gender.'
+      validateLocationFields(errors, form, `${prefix}BirthPlace`, true)
     }
 
     if (currentPersonStep === 3) {
@@ -758,24 +943,34 @@ export default function ApplicantRegistration() {
       if (!form[`${prefix}CivilStatus`]) errors[`${prefix}CivilStatus`] = 'Select a civil status.'
       if (!/^09\d{9}$/.test(mobile)) errors[`${prefix}Mobile`] = 'Enter an 11-digit mobile number starting with 09.'
       if (!emailPattern.test(email)) errors[`${prefix}Email`] = 'Enter a valid email address.'
+      validateLocationFields(errors, form, `${prefix}Residence`, true)
+    }
+
+    if (currentPersonStep === 4 && form[`${prefix}PreviouslyMarried`] === 'Yes') {
+      validateLocationFields(errors, form, `${prefix}Dissolution`, true)
     }
 
     if (currentPersonStep === 4 && !form[`${prefix}PreviouslyMarried`]) {
       errors[`${prefix}PreviouslyMarried`] = 'Select Yes or No to continue.'
     }
 
+    if (currentPersonStep === 5 || currentPersonStep === 6) {
+      const relative = currentPersonStep === 5 ? 'Father' : 'Mother'
+      validateLocationFields(errors, form, `${prefix}${relative}Residence`)
+    }
+
     if (currentPersonStep === 7) {
       const age = getAgeFromDob(prefix)
-      if (age !== null && age >= 18 && age <= 27) {
+      const requiresAdvisorInfo = age !== null && age >= 18 && age <= 27
+      validateLocationFields(errors, form, `${prefix}AdvisorResidence`, requiresAdvisorInfo)
+
+      if (requiresAdvisorInfo) {
         const requiredAdvisorFields = [
           `${prefix}AdvisorName`,
           `${prefix}AdvisorRelationship`,
           `${prefix}AdvisorCitizenship`,
           `${prefix}AdvisorResidenceHouseNo`,
           `${prefix}AdvisorResidenceStreet`,
-          `${prefix}AdvisorResidenceCity`,
-          `${prefix}AdvisorResidenceProvince`,
-          `${prefix}AdvisorResidenceCountry`,
         ]
         if (form[`${prefix}AdvisorResidenceCountry`] === 'Philippines') {
           requiredAdvisorFields.push(`${prefix}AdvisorResidenceBarangay`)
@@ -1527,8 +1722,30 @@ export default function ApplicantRegistration() {
         </div>
 
         <section className="registration-card">
+          {applicationEligibility === 'checking' ? (
+            <p role="status">Checking whether this account can start an application...</p>
+          ) : applicationEligibility === 'error' ? (
+            <div className="application-eligibility-message">
+              <p role="alert">We couldn't verify whether this account already has an application. Please try again.</p>
+              <button type="button" className="primary-button" onClick={() => void checkApplicationEligibility()}>Try again</button>
+            </div>
+          ) : applicationEligibility === 'blocked' ? (
+            <div className="application-eligibility-message">
+              <h2>This account already has an application</h2>
+              <p>Request deletion from your applicant dashboard. You can apply again after an admin approves the request.</p>
+              <button type="button" className="secondary-button" onClick={() => navigate('/applicant/dashboard')}>Go to my applications</button>
+            </div>
+          ) : (
+          <>
           <div className="form-section">
-            <h2>{progressLabel}</h2>
+            <div className="registration-form-heading">
+              <h2>{progressLabel}</h2>
+              {import.meta.env.DEV && (
+                <button type="button" className="registration-autofill-button" onClick={() => void autofillRegistration()}>
+                  Fill sample data
+                </button>
+              )}
+            </div>
             {step === 3 ? (
               <>
                 <h3>Appointment</h3>
@@ -1578,6 +1795,8 @@ export default function ApplicantRegistration() {
             </button>
           </div>
           {submitError && <p className="form-error" role="alert">{submitError}</p>}
+          </>
+          )}
         </section>
       </main>
     </div>

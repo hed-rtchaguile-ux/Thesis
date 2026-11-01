@@ -32,6 +32,36 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       })
     }
 
+    if (application._id && application.createdAt) {
+      addNotification(
+        'submitted',
+        'Application received',
+        `We received the marriage license application for ${coupleNames}. You can follow updates in your WedRings account.`,
+        false,
+        'View application',
+      )
+    }
+
+    if (application.deletionRequestStatus === 'Pending') {
+      addNotification(
+        'deletionRequest',
+        'Deletion request submitted',
+        'Your request to delete this application is awaiting admin approval. You can apply again after it is approved.',
+        false,
+        'View application',
+      )
+    }
+
+    if (application.deletionRequestStatus === 'Rejected') {
+      addNotification(
+        'deletionRequest',
+        'Deletion request not approved',
+        'Your application remains active. Contact the office if you have questions.',
+        false,
+        'View application',
+      )
+    }
+
     if (application.appointmentDate && application.appointmentDate !== 'To be assigned by office') {
       addNotification(
         'appointment',

@@ -12,6 +12,8 @@ const { buildPrintFormPdf } = require('./printForm');
 // Load environmental variables
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+const { sendApplicantNotification } = require('./applicantNotifications');
+
 const databaseDnsServers = (process.env.MONGODB_DNS_SERVERS || '8.8.8.8,1.1.1.1')
   .split(',')
   .map((server) => server.trim())
@@ -84,6 +86,8 @@ const applicationSchema = new mongoose.Schema({
   documentReviews: { type: Map, of: String },
   documentReviewNotes: { type: Map, of: String },
   notificationReads: { type: Map, of: Date },
+  deletionRequestStatus: { type: String, enum: ['Pending', 'Rejected'] },
+  deletionRequestedAt: Date,
   status: { type: String, default: 'For Review' },
   licenseReleaseDate: String,
 }, { timestamps: true });
@@ -97,6 +101,7 @@ const accountSchema = new mongoose.Schema({
   passwordResetExpiresAt: Date,
   passwordResetCodeHash: String,
   passwordResetCodeAttempts: { type: Number, default: 0 },
+  activeApplicationId: mongoose.Schema.Types.ObjectId,
   role: { type: String, required: true, enum: ['applicant', 'admin', 'superadmin'] },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -150,6 +155,28 @@ function isDatabaseUnavailable(res, action) {
     message: `${action} is temporarily unavailable because the database is disconnected. Please try again later.`,
   });
   return true;
+}
+
+function getCoupleNames(application) {
+  return [application.groomFullName, application.brideFullName].filter(Boolean).join(' & ') || 'your application';
+}
+
+function formatApplicantNotificationDate(value, time = '') {
+  if (!value || value === 'To be assigned by office') return 'None';
+
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  const formattedDate = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (!timeMatch) return formattedDate;
+
+  const hour = Number(timeMatch[1]);
+  return `${formattedDate} at ${hour % 12 || 12}:${timeMatch[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
 }
 
 async function hashPassword(password) {
@@ -684,6 +711,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
+  let claimedApplicationId;
   try {
     // Applicants submit a preferred date/time, while the office assigns the
     // actual appointment later. Validate the preference instead of the
@@ -705,14 +733,145 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
       return res.status(400).json({ message: 'Enter a valid appointment time.' });
     }
 
+    const existingApplication = await Application.exists({ applicantEmail: req.user.email });
+    if (existingApplication) {
+      return res.status(409).json({
+        message: 'This account already has an application. Request its deletion and wait for admin approval before applying again.',
+      });
+    }
+
+    claimedApplicationId = new mongoose.Types.ObjectId();
+    const accountClaim = await ApplicantAccount.findOneAndUpdate(
+      { _id: req.user.id, activeApplicationId: { $exists: false } },
+      { $set: { activeApplicationId: claimedApplicationId } },
+      { new: true },
+    ).lean();
+    if (!accountClaim) {
+      claimedApplicationId = null;
+      return res.status(409).json({
+        message: 'This account already has an application in progress. Request its deletion and wait for admin approval before applying again.',
+      });
+    }
+
     const application = await Application.create({
       ...req.body,
+      _id: claimedApplicationId,
       applicantEmail: req.user.email,
       status: 'For Review',
     });
-    res.status(201).json(application);
+    const notificationDelivery = await sendApplicantNotification(
+      application,
+      'Application received',
+      `We received the marriage license application for ${getCoupleNames(application)}. You can follow updates in your WedRings account.`,
+      'submitted',
+    );
+    res.status(201).json({ ...application.toObject(), notificationDelivery });
   } catch (error) {
+    if (claimedApplicationId) {
+      await ApplicantAccount.updateOne(
+        { _id: req.user.id, activeApplicationId: claimedApplicationId },
+        { $unset: { activeApplicationId: 1 } },
+      );
+    }
     res.status(400).json({ message: 'Unable to save application.', error: error.message });
+  }
+});
+
+app.post('/api/applications/:id/deletion-request', requireRoles(['applicant']), async (req, res) => {
+  try {
+    const application = await Application.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+        deletionRequestStatus: { $ne: 'Pending' },
+      },
+      {
+        $set: {
+          deletionRequestStatus: 'Pending',
+          deletionRequestedAt: new Date(),
+        },
+        $unset: { 'notificationReads.deletionRequest': 1 },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) {
+      const existingApplication = await Application.findOne({
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+      }).lean();
+      if (!existingApplication) return res.status(404).json({ message: 'Application not found.' });
+      return res.status(409).json({ message: 'A deletion request is already awaiting review.' });
+    }
+
+    const notificationDelivery = await sendApplicantNotification(
+      application,
+      'Deletion request submitted',
+      'Your request to delete this application has been sent to the office. You can apply again after an admin approves the request.',
+      'deletionRequest',
+    );
+    res.json({ ...application, notificationDelivery });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to request application deletion.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/deletion-request/review', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const action = String(req.body.action || '');
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ message: 'Choose whether to approve or reject the deletion request.' });
+    }
+
+    const existingApplication = await Application.findOne({
+      _id: req.params.id,
+      deletionRequestStatus: 'Pending',
+    }).lean();
+    if (!existingApplication) {
+      return res.status(404).json({ message: 'Pending deletion request not found.' });
+    }
+
+    if (action === 'reject') {
+      const application = await Application.findOneAndUpdate(
+        { _id: existingApplication._id, deletionRequestStatus: 'Pending' },
+        {
+          $set: { deletionRequestStatus: 'Rejected' },
+          $unset: { 'notificationReads.deletionRequest': 1 },
+        },
+        { new: true, runValidators: true },
+      ).lean();
+      if (!application) return res.status(409).json({ message: 'This deletion request has already been reviewed.' });
+
+      const notificationDelivery = await sendApplicantNotification(
+        application,
+        'Deletion request not approved',
+        'Your request to delete this application was not approved. Your current application remains active. Contact the office if you have questions.',
+        'deletionRequestRejected',
+      );
+      return res.json({ application, notificationDelivery });
+    }
+
+    await ApplicantAccount.updateOne(
+      { email: existingApplication.applicantEmail },
+      { $unset: { activeApplicationId: 1 } },
+    );
+    const deletion = await Application.deleteOne({
+      _id: existingApplication._id,
+      deletionRequestStatus: 'Pending',
+    });
+    if (deletion.deletedCount !== 1) {
+      return res.status(409).json({ message: 'This deletion request has already been reviewed.' });
+    }
+
+    const notificationDelivery = await sendApplicantNotification(
+      existingApplication,
+      'Application deletion approved',
+      'An admin approved your request and deleted the application. You can now submit a new application.',
+      'deletionRequestApproved',
+    );
+    res.json({ deleted: true, applicationId: String(existingApplication._id), notificationDelivery });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to review the deletion request.', error: error.message });
   }
 });
 
@@ -873,6 +1032,17 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
       return res.status(404).json({ message: 'Application not found.' });
     }
 
+    if (status === 'Rejected') {
+      const coupleNames = getCoupleNames(application);
+      const notificationDelivery = await sendApplicantNotification(
+        application,
+        'Application needs updating',
+        `Your application for ${coupleNames} was rejected. Please review and update it before submitting again.`,
+        'rejected',
+      );
+      return res.json({ ...application, notificationDelivery });
+    }
+
     res.json(application);
   } catch (error) {
     res.status(400).json({ message: 'Unable to update application status.', error: error.message });
@@ -923,7 +1093,14 @@ app.put('/api/applications/:id/second-appointment', requireRoles(['admin', 'supe
       { $set: { secondAppointmentDate: secondDateKey, secondAppointmentTime: time }, $unset: { 'notificationReads.secondAppointment': 1 } },
       { new: true, runValidators: true },
     ).lean();
-    res.json(updatedApplication);
+    if (!updatedApplication) return res.status(404).json({ message: 'Application not found.' });
+    const notificationDelivery = await sendApplicantNotification(
+      updatedApplication,
+      'Counseling appointment scheduled',
+      `Your second appointment for counseling is set for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}.`,
+      'secondAppointment',
+    );
+    res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
     res.status(400).json({ message: 'Unable to schedule the counseling appointment.', error: error.message });
   }
@@ -948,7 +1125,14 @@ app.put('/api/applications/:id/license-release-date', requireRoles(['admin', 'su
     application.licenseReleaseDate = releaseDate;
     application.set('notificationReads.licenseRelease', undefined);
     await application.save();
-    res.json(application.toObject());
+    const updatedApplication = application.toObject();
+    const notificationDelivery = await sendApplicantNotification(
+      updatedApplication,
+      'Marriage license release',
+      `Your marriage license is scheduled for release on ${formatApplicantNotificationDate(updatedApplication.licenseReleaseDate)}.`,
+      'licenseRelease',
+    );
+    res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
     res.status(400).json({ message: 'Unable to set the license release date.', error: error.message });
   }
@@ -991,6 +1175,21 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
       return res.status(404).json({ message: 'Application not found.' });
     }
 
+    if (reviewStatus === 'Needs Redo') {
+      const documentName = req.params.documentKey.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
+      const coupleNames = getCoupleNames(application);
+      const reviewInstruction = application.documentReviewNotes?.[req.params.documentKey];
+      const notificationDelivery = await sendApplicantNotification(
+        application,
+        'Document needs replacement',
+        reviewInstruction
+          ? `${documentName} needs to be replaced for ${coupleNames}. Reviewer note: ${reviewInstruction}`
+          : `${documentName} needs to be replaced for ${coupleNames}.`,
+        `redo-${req.params.documentKey}`,
+      );
+      return res.json({ ...application, notificationDelivery });
+    }
+
     res.json(application);
   } catch (error) {
     res.status(400).json({ message: 'Unable to update document review.', error: error.message });
@@ -1000,7 +1199,7 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(appointment|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|secondAppointment|rejected|licenseRelease|deletionRequest|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

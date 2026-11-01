@@ -4,6 +4,7 @@ import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
+import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
@@ -21,7 +22,6 @@ function getAppointmentDateKey(value) {
 
   const [, first, second, year] = slashMatch
   const firstNumber = Number(first)
-  const secondNumber = Number(second)
   const month = firstNumber > 12 ? second : first
   const day = firstNumber > 12 ? first : second
 
@@ -136,6 +136,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
                       <small>{application.applicantEmail}</small>
                       {view !== 'appointments' && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
+                      {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                       {view === 'appointments' && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     </div>
                     <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>
@@ -146,6 +147,11 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                   {detailsOpen && <ApplicationDetails
                     application={application}
                     onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+                    onDeletionReviewed={(result) => setApplications((currentApplications) => (
+                      result.deleted
+                        ? currentApplications.filter((item) => item._id !== result.applicationId)
+                        : currentApplications.map((item) => item._id === result.application._id ? result.application : item)
+                    ))}
                   />}
                 </div>
               )
@@ -157,7 +163,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   )
 }
 
-function ApplicationDetails({ application, onAppointmentSaved }) {
+function ApplicationDetails({ application, onAppointmentSaved, onDeletionReviewed }) {
   const documents = Object.entries(application.documents || {})
 
   return (
@@ -165,6 +171,7 @@ function ApplicationDetails({ application, onAppointmentSaved }) {
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p>{application.paymentReceipt ? <><h5>Over-the-counter payment receipt</h5><DocumentPreview label="Payment receipt" value={application.paymentReceipt} /></> : <p><strong>Over-the-counter payment receipt:</strong> Not uploaded</p>}</div>
+      <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <article className="admin-submitted-document" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /></article>) : <p>No documents listed.</p>}</div>

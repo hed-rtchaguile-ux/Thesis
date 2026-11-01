@@ -6,7 +6,7 @@ export default function DocumentPreview({ label, value }) {
   if (value.startsWith('data:image/')) {
     return (
       <a className="document-preview-image-link" href={value} target="_blank" rel="noreferrer" aria-label={`Open ${label} image`}>
-        <img className="document-preview-image" src={value} alt={label} loading="lazy" />
+        <img className="document-preview-image" src={value} alt={label} />
       </a>
     )
   }
