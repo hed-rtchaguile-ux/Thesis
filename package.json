@@ -1,25 +1,14 @@
 {
   "name": "thesis",
+  "private": true,
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run build --workspace frontend",
+    "lint": "npm run lint --workspace frontend",
+    "start": "npm run start --workspace backend"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/hed-rtchaguile-ux/Thesis.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/hed-rtchaguile-ux/Thesis/issues"
-  },
-  "homepage": "https://github.com/hed-rtchaguile-ux/Thesis#readme",
-  "dependencies": {
-    "dotenv": "^18.0.9",
-    "nodemailer": "^10.2.1"
-  }
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
 }

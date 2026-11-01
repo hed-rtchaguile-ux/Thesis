@@ -1,5 +1,25 @@
 # React + Vite
 
+## Deploying to Vercel
+
+Deploy the repository root as the Vercel project root and select the **Other**
+framework preset. The root npm workspace builds the Vite frontend into
+`frontend/dist`, while `api/[...path].js` routes the existing Express API
+through a Vercel Node.js Function.
+
+Configure these environment variables in the Vercel project for Production
+(and Preview if needed):
+
+- `MONGODB_URI`
+- `APP_AUTH_TOKEN_SECRET`
+- `BREVO_API_KEY`
+- `SENDER_NAME`
+- `SENDER_EMAIL` (must be verified in Brevo)
+
+Use the Brevo API key, not the SMTP key, for `BREVO_API_KEY`. Redeploy after
+changing environment variables. Keep credentials out of Git and frontend
+variables.
+
 ## Public Access
 
 The current temporary public link is:

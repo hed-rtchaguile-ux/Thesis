@@ -9,17 +9,11 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const { buildPrintFormPdf } = require('./printForm');
 
-// Load environmental variables
-dotenv.config({ path: path.join(__dirname, '.env') });
-
 const { sendApplicantNotification } = require('./applicantNotifications');
 
-const databaseDnsServers = (process.env.MONGODB_DNS_SERVERS || '8.8.8.8,1.1.1.1')
-  .split(',')
-  .map((server) => server.trim())
-  .filter(Boolean);
-
-systemDns.setServers(databaseDnsServers);
+if (!process.env.VERCEL) {
+  dotenv.config({ path: path.join(__dirname, '.env') });
+}
 
 const app = express();
 
@@ -33,29 +27,7 @@ const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
 const scrypt = promisify(crypto.scrypt);
 const passwordResetRequestWindows = new Map();
 const registrationRequestWindows = new Map();
-
-let dnsRecords;
-
-try {
-  dnsRecords = JSON.parse(process.env.DNS_RECORDS || '{"localhost":"127.0.0.1"}');
-} catch (error) {
-  console.error('DNS_RECORDS must be valid JSON, for example {"example.test":"127.0.0.1"}.');
-  process.exit(1);
-}
-
-if (!dnsRecords || Array.isArray(dnsRecords) || typeof dnsRecords !== 'object') {
-  console.error('DNS_RECORDS must be a JSON object mapping hostnames to IPv4 addresses.');
-  process.exit(1);
-}
-
-const normalizedDnsRecords = Object.fromEntries(
-  Object.entries(dnsRecords).map(([hostname, address]) => [hostname.toLowerCase().replace(/\.$/, ''), address]),
-);
-
-if (!DATABASE_CONNECTION_STRING) {
-  console.error('MongoDB Atlas configuration is incomplete. Set the real MONGODB_URI in backend/.env.');
-  process.exit(1);
-}
+let databaseConnectionPromise;
 
 const applicationSchema = new mongoose.Schema({
   applicantEmail: { type: String, required: true, index: true },
@@ -121,6 +93,104 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '12mb' }));
+
+async function connectToDatabase() {
+  if (!DATABASE_CONNECTION_STRING) {
+    throw new Error('MONGODB_URI is not configured.');
+  }
+  if (mongoose.connection.readyState === 1) return;
+  if (!databaseConnectionPromise) {
+    databaseConnectionPromise = mongoose.connect(DATABASE_CONNECTION_STRING, {
+      serverSelectionTimeoutMS: 10000,
+      retryWrites: true,
+    }).then(async () => {
+      await initializeDemoAccounts();
+      console.log('Successfully connected to MongoDB database: wedrings');
+
+      try {
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        const collectionNames = new Set(collections.map((collection) => collection.name));
+
+        if (!collectionNames.has('applications')) {
+          await mongoose.connection.db.createCollection('applications');
+          console.log('Created MongoDB collection: applications');
+        }
+
+        if (collectionNames.has('info_wedrings')) {
+          const legacyApplications = mongoose.connection.db.collection('info_wedrings');
+          const targetApplications = mongoose.connection.db.collection('applications');
+          let migrationBatch = [];
+          let copiedCount = 0;
+
+          for await (const legacyApplication of legacyApplications.find()) {
+            const { _id, ...legacyFields } = legacyApplication;
+            migrationBatch.push({
+              updateOne: {
+                filter: { _id },
+                update: { $setOnInsert: legacyFields },
+                upsert: true,
+              },
+            });
+
+            if (migrationBatch.length === 500) {
+              const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
+              copiedCount += result.upsertedCount;
+              migrationBatch = [];
+            }
+          }
+
+          if (migrationBatch.length > 0) {
+            const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
+            copiedCount += result.upsertedCount;
+          }
+
+          if (copiedCount > 0) {
+            console.log(`Copied ${copiedCount} legacy application(s) into applications.`);
+          }
+        }
+
+        const legacyVerifyUpdate = await Application.updateMany(
+          { status: 'Verify' },
+          { $set: { status: 'For Review' } },
+        );
+        const legacyRejectUpdate = await Application.updateMany(
+          { status: 'Reject' },
+          { $set: { status: 'Rejected' } },
+        );
+        const normalizedStatusCount = legacyVerifyUpdate.modifiedCount + legacyRejectUpdate.modifiedCount;
+
+        if (normalizedStatusCount > 0) {
+          console.log(`Normalized ${normalizedStatusCount} legacy application status(es).`);
+        }
+      } catch (collectionError) {
+        console.error('MongoDB collection setup error:', collectionError);
+      }
+    }).catch((error) => {
+      databaseConnectionPromise = undefined;
+      console.error('MongoDB connection error:', error.message);
+      const serverErrors = [...(error.reason?.servers?.values() || [])]
+        .map((server) => server.error?.message)
+        .filter(Boolean);
+      if (serverErrors.length > 0) {
+        console.error('MongoDB connection details:', [...new Set(serverErrors)].join('; '));
+      }
+      throw error;
+    });
+  }
+  await databaseConnectionPromise;
+}
+
+app.use(async (req, res, next) => {
+  if (req.path === '/api/status') return next();
+  try {
+    await connectToDatabase();
+    next();
+  } catch {
+    res.status(503).json({
+      message: 'The service is temporarily unavailable because the database is disconnected. Please try again later.',
+    });
+  }
+});
 
 app.get('/api/status', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -389,6 +459,59 @@ app.put('/api/auth/change-password', requireRoles(['applicant', 'admin', 'supera
   }
 });
 
+async function sendPasswordResetEmail(email, code) {
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.SENDER_EMAIL;
+  if (brevoApiKey && senderEmail) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': brevoApiKey,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: process.env.SENDER_NAME || 'WedRings',
+          email: senderEmail,
+        },
+        to: [{ email }],
+        subject: 'Your WedRings password reset code',
+        textContent: `Your password reset verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
+        htmlContent: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.message || `Brevo email request failed with status ${response.status}.`);
+    }
+    return;
+  }
+
+  if (process.env.VERCEL) {
+    throw new Error('BREVO_API_KEY and SENDER_EMAIL must be configured on Vercel.');
+  }
+
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  if (!smtpConfigured) return;
+
+  const nodemailer = require('nodemailer');
+  const port = Number(process.env.SMTP_PORT || 587);
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure: process.env.SMTP_SECURE === 'true' || port === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Your WedRings password reset code',
+    text: `Your password reset verification code is ${code}. It expires in 10 minutes.`,
+    html: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
+  });
+}
+
 app.post('/api/auth/forgot-password', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^\s@]+@gmail\.com$/.test(email)) {
@@ -399,8 +522,11 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     return res.status(429).json({ message: 'Too many reset requests. Please try again later.' });
   }
 
-  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-  if (!smtpConfigured && process.env.NODE_ENV === 'production') {
+  const emailConfigured = Boolean(
+    (process.env.BREVO_API_KEY && process.env.SENDER_EMAIL)
+    || (!process.env.VERCEL && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+  );
+  if (!emailConfigured && process.env.NODE_ENV === 'production') {
     return res.status(503).json({ message: 'Password reset is temporarily unavailable. Please contact support.' });
   }
   if (!APP_AUTH_TOKEN_SECRET) {
@@ -419,7 +545,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
     const responseBody = {
       message: 'If an account exists for that email, a verification code will be sent shortly.',
-      developmentVerificationCodeLogged: !smtpConfigured,
+      developmentVerificationCodeLogged: !emailConfigured,
     };
     if (!account) {
       res.set('Cache-Control', 'no-store');
@@ -438,22 +564,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       $unset: { passwordResetTokenHash: 1 },
     });
 
-    if (smtpConfigured) {
-      const nodemailer = require('nodemailer');
-      const port = Number(process.env.SMTP_PORT || 587);
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port,
-        secure: process.env.SMTP_SECURE === 'true' || port === 465,
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      });
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: account.email,
-        subject: 'Your WedRings password reset code',
-        text: `Your password reset verification code is ${code}. It expires in 10 minutes.`,
-        html: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
-      });
+    if (emailConfigured) {
+      await sendPasswordResetEmail(account.email, code);
     } else {
       console.info(`Development password reset code for ${email}: ${code}`);
     }
@@ -588,122 +700,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
     res.status(500).json({ message: 'Unable to reset the password.' });
   }
 });
-
-const dnsServer = dns.createUDPServer((request, send) => {
-  const response = dns.Packet.createResponseFromRequest(request);
-  const [question] = request.questions;
-
-  if (!question || question.type !== dns.Packet.TYPE.A) {
-    response.header.rcode = dns.Packet.RCODE.NXDOMAIN;
-    return send(response);
-  }
-
-  const hostname = question.name.toLowerCase().replace(/\.$/, '');
-  const address = normalizedDnsRecords[hostname];
-
-  if (!address) {
-    response.header.rcode = dns.Packet.RCODE.NXDOMAIN;
-    return send(response);
-  }
-
-  response.answers.push({
-    name: question.name,
-    type: dns.Packet.TYPE.A,
-    class: dns.Packet.CLASS.IN,
-    ttl: 300,
-    address,
-  });
-  send(response);
-});
-
-dnsServer.on('requestError', (error) => {
-  console.error('DNS request error:', error.message);
-});
-
-dnsServer.listen(DNS_PORT, DNS_HOST, () => {
-  console.log(`DNS server is running on ${DNS_HOST}:${DNS_PORT}`);
-});
-
-// Connecting to the Database using our defined const
-mongoose.connect(DATABASE_CONNECTION_STRING, {
-  serverSelectionTimeoutMS: 10000,
-  retryWrites: true,
-})
-  .then(async () => {
-    await initializeDemoAccounts();
-    console.log('Successfully connected to MongoDB database: wedrings 💍');
-
-    try {
-      const collections = await mongoose.connection.db.listCollections().toArray();
-      const collectionNames = new Set(collections.map((collection) => collection.name));
-
-      if (!collectionNames.has('applications')) {
-        await mongoose.connection.db.createCollection('applications');
-        console.log('Created MongoDB collection: applications');
-      }
-
-      // Keep legacy applicant submissions visible after the collection name
-      // changed. Copy only missing IDs and retain the original collection.
-      if (collectionNames.has('info_wedrings')) {
-        const legacyApplications = mongoose.connection.db.collection('info_wedrings');
-        const targetApplications = mongoose.connection.db.collection('applications');
-        let migrationBatch = [];
-        let copiedCount = 0;
-
-        for await (const legacyApplication of legacyApplications.find()) {
-          const { _id, ...legacyFields } = legacyApplication;
-          migrationBatch.push({
-            updateOne: {
-              filter: { _id },
-              update: { $setOnInsert: legacyFields },
-              upsert: true,
-            },
-          });
-
-          if (migrationBatch.length === 500) {
-            const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
-            copiedCount += result.upsertedCount;
-            migrationBatch = [];
-          }
-        }
-
-        if (migrationBatch.length > 0) {
-          const result = await targetApplications.bulkWrite(migrationBatch, { ordered: false });
-          copiedCount += result.upsertedCount;
-        }
-
-        if (copiedCount > 0) {
-          console.log(`Copied ${copiedCount} legacy application(s) into applications.`);
-        }
-      }
-
-      const legacyVerifyUpdate = await Application.updateMany(
-        { status: 'Verify' },
-        { $set: { status: 'For Review' } },
-      );
-      const legacyRejectUpdate = await Application.updateMany(
-        { status: 'Reject' },
-        { $set: { status: 'Rejected' } },
-      );
-      const normalizedStatusCount = legacyVerifyUpdate.modifiedCount + legacyRejectUpdate.modifiedCount;
-
-      if (normalizedStatusCount > 0) {
-        console.log(`Normalized ${normalizedStatusCount} legacy application status(es).`);
-      }
-    } catch (collectionError) {
-      console.error('MongoDB collection setup error:', collectionError);
-    }
-  })
-  .catch((error) => {
-    console.error('MongoDB connection error:', error.message);
-    const serverErrors = [...(error.reason?.servers?.values() || [])]
-      .map((server) => server.error?.message)
-      .filter(Boolean);
-    if (serverErrors.length > 0) {
-      console.error('MongoDB connection details:', [...new Set(serverErrors)].join('; '));
-    }
-    console.error('Please verify the Atlas cluster is running and your IP is whitelisted.');
-  });
 
 // Base route
 app.get('/', (req, res) => {
@@ -1216,7 +1212,67 @@ app.put('/api/applications/:id/notifications/:notificationKey/read', requireRole
   }
 });
 
-// Launch server
-app.listen(BACKEND_PORT, () => {
-  console.log(`Backend server is running on port ${BACKEND_PORT}`);
-});
+if (require.main === module) {
+  const databaseDnsServers = (process.env.MONGODB_DNS_SERVERS || '8.8.8.8,1.1.1.1')
+    .split(',')
+    .map((server) => server.trim())
+    .filter(Boolean);
+  systemDns.setServers(databaseDnsServers);
+
+  try {
+    const dnsRecords = JSON.parse(process.env.DNS_RECORDS || '{"localhost":"127.0.0.1"}');
+    if (!dnsRecords || Array.isArray(dnsRecords) || typeof dnsRecords !== 'object') {
+      throw new Error('DNS_RECORDS must be a JSON object mapping hostnames to IPv4 addresses.');
+    }
+
+    const normalizedDnsRecords = Object.fromEntries(
+      Object.entries(dnsRecords).map(([hostname, address]) => [hostname.toLowerCase().replace(/\.$/, ''), address]),
+    );
+    const dnsServer = dns.createUDPServer((request, send) => {
+      const response = dns.Packet.createResponseFromRequest(request);
+      const [question] = request.questions;
+
+      if (!question || question.type !== dns.Packet.TYPE.A) {
+        response.header.rcode = dns.Packet.RCODE.NXDOMAIN;
+        return send(response);
+      }
+
+      const hostname = question.name.toLowerCase().replace(/\.$/, '');
+      const address = normalizedDnsRecords[hostname];
+      if (!address) {
+        response.header.rcode = dns.Packet.RCODE.NXDOMAIN;
+        return send(response);
+      }
+
+      response.answers.push({
+        name: question.name,
+        type: dns.Packet.TYPE.A,
+        class: dns.Packet.CLASS.IN,
+        ttl: 300,
+        address,
+      });
+      send(response);
+    });
+
+    dnsServer.on('requestError', (error) => {
+      console.error('DNS request error:', error.message);
+    });
+    dnsServer.listen(DNS_PORT, DNS_HOST, () => {
+      console.log(`DNS server is running on ${DNS_HOST}:${DNS_PORT}`);
+    });
+  } catch (error) {
+    console.error('Unable to start the local DNS server:', error.message);
+    process.exitCode = 1;
+  }
+
+  if (process.exitCode !== 1) {
+    app.listen(BACKEND_PORT, () => {
+      console.log(`Backend server is running on port ${BACKEND_PORT}`);
+    });
+    connectToDatabase().catch(() => {
+      console.error('Please verify the Atlas cluster is running and your IP is whitelisted.');
+    });
+  }
+}
+
+module.exports = app;
