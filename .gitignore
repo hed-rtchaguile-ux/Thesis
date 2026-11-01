@@ -7,8 +7,10 @@ dist/
 # Environment files
 .env
 .env.*
+.env*
 !.env.example
 
 # Local tooling
 .vscode/
 .DS_Store
+.vercel

@@ -2,10 +2,10 @@
 
 ## Deploying to Vercel
 
-Deploy the repository root as the Vercel project root and select the **Other**
-framework preset. The root npm workspace builds the Vite frontend into
-`frontend/dist`, while `api/[...path].js` routes the existing Express API
-through a Vercel Node.js Function.
+Deploy the repository root as the Vercel project root. Vercel detects the Vite
+frontend and Express backend as two services in one deployment. The backend
+serves `/api/*`; the frontend handles the remaining routes. Vercel Services is
+currently a Beta feature.
 
 Configure these environment variables in the Vercel project for Production
 (and Preview if needed):
