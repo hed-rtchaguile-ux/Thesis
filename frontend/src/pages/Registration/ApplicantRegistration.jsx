@@ -646,7 +646,7 @@ export default function ApplicantRegistration() {
       ? countryMetadata.getCountries().map(({ name, shortName }) => ({ name, isoCode: shortName })).sort((a, b) => a.name.localeCompare(b.name))
       : []
     const countryNames = worldCountries.map(({ name }) => name)
-    const citizenshipOptions = [...new Set([...formDropdownOptions.citizenship, ...countryNames])].sort()
+    const citizenshipOptions = formDropdownOptions.citizenship
     const locationFields = getLocationFields(field)
     const selectedCountry = locationFields
       ? worldCountries.find(({ name }) => name === form[locationFields.country])
@@ -706,7 +706,7 @@ export default function ApplicantRegistration() {
 
     const isCustomValue = value !== ''
       && !(optionKey === 'city' && !countryCityDataLoaded)
-      && !((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata)
+      && !(optionKey === 'country' && !countryMetadata)
       && !options.includes(value)
     const isCustom = customDropdownFields[field] || isCustomValue
     const selectedValue = isCustom ? '__other' : value
@@ -746,7 +746,7 @@ export default function ApplicantRegistration() {
             }
           }}
           onFocus={() => {
-            if ((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata) {
+            if (optionKey === 'country' && !countryMetadata) {
               void loadCountryMetadata()
             }
             if (optionKey === 'city' && selectedCountry && selectedCountry.isoCode !== 'PH') {
@@ -759,11 +759,11 @@ export default function ApplicantRegistration() {
               ? 'Select the previous location first'
               : optionKey === 'city' && selectedCountryCityStatus === 'loading'
                 ? 'Loading city list...'
-                : (optionKey === 'country' || optionKey === 'citizenship') && countryMetadataStatus === 'loading'
+                : optionKey === 'country' && countryMetadataStatus === 'loading'
                   ? 'Loading options...'
                 : `Select ${fieldLabel.toLowerCase()}`}
           </option>
-          {((optionKey === 'country' || optionKey === 'citizenship') && !countryMetadata && value)
+          {(optionKey === 'country' && !countryMetadata && value)
             && <option value={value}>{value}</option>}
           {optionKey === 'city' && !countryCityDataLoaded && value && <option value={value}>{value}</option>}
           {options.map((option) => (
@@ -773,7 +773,7 @@ export default function ApplicantRegistration() {
           ))}
           <option value="__other">Other</option>
         </select>
-        {(optionKey === 'country' || optionKey === 'citizenship') && countryMetadataStatus === 'error' && (
+        {optionKey === 'country' && countryMetadataStatus === 'error' && (
           <span className="field-error" role="alert">
             Country list unavailable. <button type="button" onClick={() => void loadCountryMetadata()}>Retry</button>
           </span>
@@ -1054,7 +1054,10 @@ export default function ApplicantRegistration() {
 
       if (!response.ok) {
         const result = await response.json().catch(() => null)
-        throw new Error(result?.message || 'Unable to submit application.')
+        const message = result?.message || (response.status === 413
+          ? 'The application documents are too large to submit. Reduce the file sizes and try again.'
+          : 'Unable to submit application.')
+        throw new Error(message)
       }
       navigate('/applicant/dashboard')
     } catch (error) {

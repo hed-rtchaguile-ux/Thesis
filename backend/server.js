@@ -92,7 +92,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '12mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 async function connectToDatabase() {
   if (!DATABASE_CONNECTION_STRING) {
@@ -1221,6 +1221,15 @@ app.put('/api/applications/:id/notifications/:notificationKey/read', requireRole
   } catch (error) {
     res.status(400).json({ message: 'Unable to mark notification as read.', error: error.message });
   }
+});
+
+app.use((error, req, res, next) => {
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({
+      message: 'The application documents are too large to submit. Reduce the file sizes and try again.',
+    });
+  }
+  next(error);
 });
 
 if (require.main === module) {
