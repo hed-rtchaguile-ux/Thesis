@@ -9,6 +9,8 @@ const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marit
 const MAX_DOCUMENT_FILE_BYTES = 5 * 1024 * 1024
 const MAX_TOTAL_DOCUMENT_BYTES = 10 * 1024 * 1024
 const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024
+const FIXED_PAYMENT_METHOD = 'Cash'
+const FIXED_PAYMENT_AMOUNT = '₱ 500.00'
 const REGISTRATION_DRAFT_TTL = 24 * 60 * 60 * 1000
 let registrationDraftDatabasePromise
 const appointmentTimeOptions = [
@@ -372,8 +374,8 @@ const initialForm = {
   appointmentDate: '',
   appointmentTime: '',
   appointmentLocation: 'Villaverde',
-  paymentMethod: 'Cash',
-  paymentAmount: '₱ 800.00',
+  paymentMethod: FIXED_PAYMENT_METHOD,
+  paymentAmount: FIXED_PAYMENT_AMOUNT,
 }
 
 const namePattern = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/
@@ -696,8 +698,8 @@ export default function ApplicantRegistration() {
       })(),
       appointmentTime: '09:00',
       appointmentLocation: 'Villaverde',
-      paymentMethod: 'Cash',
-      paymentAmount: '₱ 800.00',
+      paymentMethod: FIXED_PAYMENT_METHOD,
+      paymentAmount: FIXED_PAYMENT_AMOUNT,
     }
     const sampleImage = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420"><rect width="640" height="420" fill="#f3f5fa"/><rect x="24" y="24" width="592" height="372" rx="16" fill="white" stroke="#53689f" stroke-width="4"/><text x="320" y="190" text-anchor="middle" font-family="Arial" font-size="32" fill="#53689f">SAMPLE ONLY</text><text x="320" y="238" text-anchor="middle" font-family="Arial" font-size="20" fill="#53689f">NOT A REAL DOCUMENT</text></svg>')}`
     const sampleDocuments = [
@@ -1212,6 +1214,8 @@ export default function ApplicantRegistration() {
 
     const submittedForm = {
       ...form,
+      paymentMethod: FIXED_PAYMENT_METHOD,
+      paymentAmount: FIXED_PAYMENT_AMOUNT,
       preferredAppointmentDate: form.appointmentDate,
       preferredAppointmentTime: form.appointmentTime,
       appointmentDate: 'To be assigned by office',
@@ -1781,14 +1785,14 @@ export default function ApplicantRegistration() {
     <div className="payment-form-layout">
       <div className="field-group">
         <label>Payment Method</label>
-        <div className="payment-method-note">Pay over the counter (cash only)</div>
+        <div className="payment-method-note">{FIXED_PAYMENT_METHOD} — fixed payment method</div>
         <FieldError message={validationErrors.paymentMethod} />
       </div>
 
       <div className="field-group">
         <label>Amount</label>
         <input
-          value={form.paymentAmount}
+          value={FIXED_PAYMENT_AMOUNT}
           readOnly
           aria-invalid={Boolean(validationErrors.paymentAmount)}
         />
@@ -1885,8 +1889,8 @@ export default function ApplicantRegistration() {
             {renderReviewField('Preferred date', form.appointmentDate)}
             {renderReviewField('Preferred time', form.appointmentTime ? formatAppointmentTime(form.appointmentTime) : '')}
             {renderReviewField('Office location', form.appointmentLocation)}
-            {renderReviewField('Payment method', 'Pay over the counter (cash only)')}
-            {renderReviewField('Amount', form.paymentAmount)}
+            {renderReviewField('Payment method', FIXED_PAYMENT_METHOD)}
+            {renderReviewField('Amount', FIXED_PAYMENT_AMOUNT)}
           </div>
         </section>
 

@@ -6,6 +6,9 @@ import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
 import './ApplicantDashboard.css'
 
+const FIXED_PAYMENT_METHOD = 'Cash'
+const FIXED_PAYMENT_AMOUNT = '₱ 500.00'
+
 export default function ApplicantDashboard() {
   const { user, logout } = useAuth()
   const location = useLocation()
@@ -390,6 +393,8 @@ export default function ApplicantDashboard() {
     !field.startsWith('groom')
     && !field.startsWith('bride')
     && !appointmentEditFields.includes(field)
+    && field !== 'paymentMethod'
+    && field !== 'paymentAmount'
   ))
 
   return (
@@ -704,11 +709,11 @@ export default function ApplicantDashboard() {
                   )}
                 </section>
 
-                {otherEditFields.length > 0 && (
+                {(otherEditFields.length > 0 || selectedApplication) && (
                   <section className="applicant-detail-card">
                     <div className="applicant-detail-heading">
                       <h3>Other submitted information</h3>
-                      {editingSection !== 'other' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('other'); setEditError('') }}>Edit information</button>}
+                      {otherEditFields.length > 0 && editingSection !== 'other' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('other'); setEditError('') }}>Edit information</button>}
                     </div>
                     {editingSection === 'other' ? (
                       <form onSubmit={saveApplicationEdit}>
@@ -719,6 +724,8 @@ export default function ApplicantDashboard() {
                     ) : otherEditFields.map((field) => (
                       <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
                     ))}
+                    <p><strong>Payment Method:</strong> {FIXED_PAYMENT_METHOD}</p>
+                    <p><strong>Payment Amount:</strong> {FIXED_PAYMENT_AMOUNT}</p>
                   </section>
                 )}
 

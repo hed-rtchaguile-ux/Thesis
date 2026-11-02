@@ -24,6 +24,8 @@ const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI;
 const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'));
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
+const FIXED_PAYMENT_METHOD = 'Cash';
+const FIXED_PAYMENT_AMOUNT = '₱ 500.00';
 const scrypt = promisify(crypto.scrypt);
 const passwordResetRequestWindows = new Map();
 const registrationRequestWindows = new Map();
@@ -761,11 +763,17 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
       });
     }
 
+    const applicationData = req.body.applicationData && typeof req.body.applicationData === 'object' && !Array.isArray(req.body.applicationData)
+      ? { ...req.body.applicationData, paymentMethod: FIXED_PAYMENT_METHOD, paymentAmount: FIXED_PAYMENT_AMOUNT }
+      : req.body.applicationData;
     const application = await Application.create({
       ...req.body,
       _id: claimedApplicationId,
       applicantEmail: req.user.email,
       status: 'For Review',
+      paymentMethod: FIXED_PAYMENT_METHOD,
+      paymentAmount: FIXED_PAYMENT_AMOUNT,
+      applicationData,
     });
     const notificationDelivery = await sendApplicantNotification(
       application,
@@ -982,6 +990,15 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
     const editableFields = Object.fromEntries(
       Object.entries(req.body).filter(([key]) => !protectedFields.has(key)),
     );
+    editableFields.paymentMethod = FIXED_PAYMENT_METHOD;
+    editableFields.paymentAmount = FIXED_PAYMENT_AMOUNT;
+    if (editableFields.applicationData && typeof editableFields.applicationData === 'object' && !Array.isArray(editableFields.applicationData)) {
+      editableFields.applicationData = {
+        ...editableFields.applicationData,
+        paymentMethod: FIXED_PAYMENT_METHOD,
+        paymentAmount: FIXED_PAYMENT_AMOUNT,
+      };
+    }
 
     const ownerFilter = { _id: req.params.id, applicantEmail: req.user.email };
     const existingApplication = await Application.findOne(ownerFilter).lean();
