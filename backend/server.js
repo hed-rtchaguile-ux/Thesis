@@ -177,7 +177,14 @@ async function connectToDatabase() {
       throw error;
     });
   }
-  await databaseConnectionPromise;
+  const connectionPromise = databaseConnectionPromise;
+  try {
+    await connectionPromise;
+  } finally {
+    if (databaseConnectionPromise === connectionPromise) {
+      databaseConnectionPromise = undefined;
+    }
+  }
 }
 
 app.use(async (req, res, next) => {
@@ -483,6 +490,11 @@ async function sendPasswordResetEmail(email, code) {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
+      console.error('Brevo rejected the password reset email:', JSON.stringify({
+        status: response.status,
+        code: result.code || '',
+        message: result.message || '',
+      }));
       throw new Error(result.message || `Brevo email request failed with status ${response.status}.`);
     }
     return;
