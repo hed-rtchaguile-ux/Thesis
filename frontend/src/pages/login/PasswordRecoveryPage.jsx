@@ -100,7 +100,7 @@ export default function PasswordRecoveryPage({ mode }) {
           : ''
 
   return (
-    <main className="login-shell">
+    <main className="login-shell login-page-shell">
       <section className="login-intro">
         <Link className="brand" to="/login">
           <span className="brand-mark" aria-label="WedRings logo">
