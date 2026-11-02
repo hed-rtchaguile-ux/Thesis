@@ -6,9 +6,9 @@ import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
 const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marital history', 'Father details', 'Mother details', 'Person who gave advice', 'Documents']
-const MAX_DOCUMENT_FILE_BYTES = 2 * 1024 * 1024
-const MAX_TOTAL_DOCUMENT_BYTES = 8 * 1024 * 1024
-const MAX_COMPRESSED_IMAGE_BYTES = 1024 * 1024
+const MAX_DOCUMENT_FILE_BYTES = 5 * 1024 * 1024
+const MAX_TOTAL_DOCUMENT_BYTES = 10 * 1024 * 1024
+const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024
 const REGISTRATION_DRAFT_TTL = 24 * 60 * 60 * 1000
 let registrationDraftDatabasePromise
 const appointmentTimeOptions = [
@@ -521,7 +521,6 @@ export default function ApplicantRegistration() {
   const [personStep, setPersonStep] = useState(1)
   const [form, setForm] = useState(initialForm)
   const [draftLoaded, setDraftLoaded] = useState(false)
-  const [draftRestored, setDraftRestored] = useState(false)
   const [draftError, setDraftError] = useState('')
   const [applicationEligibility, setApplicationEligibility] = useState('checking')
   const [customDropdownFields, setCustomDropdownFields] = useState({})
@@ -585,7 +584,6 @@ export default function ApplicantRegistration() {
         setPersonStep(Number.isInteger(draft.personStep) && draft.personStep >= 1 && draft.personStep <= 8 ? draft.personStep : 1)
         setDocuments(draft.documents || {})
         setCustomDropdownFields(draft.customDropdownFields || {})
-        setDraftRestored(true)
       })
       .catch((error) => {
         console.error('Unable to restore the saved application form:', error)
@@ -715,7 +713,6 @@ export default function ApplicantRegistration() {
     setCustomDropdownFields({})
     setValidationErrors({})
     setSubmitError('')
-    setDraftRestored(false)
     setStep(1)
     setPersonStep(1)
     Object.values(fileInputRefs.current).forEach((input) => {
@@ -1268,7 +1265,7 @@ export default function ApplicantRegistration() {
     if (!selectedFile) return
     event.target.value = ''
     if (selectedFile.size > MAX_DOCUMENT_FILE_BYTES) {
-      setValidationErrors((current) => ({ ...current, [key]: 'Each file must be 2 MB or smaller.' }))
+      setValidationErrors((current) => ({ ...current, [key]: 'Each file must be 5 MB or smaller.' }))
       return
     }
 
@@ -1700,7 +1697,7 @@ export default function ApplicantRegistration() {
         <div className="formal-box-title">{title}</div>
       </div>
       <p className="section-subtitle">
-        Each photo or PDF must be 2 MB or smaller. Photos are compressed automatically. All uploaded files together must be 8 MB or smaller.
+        Each photo or PDF can be up to 5 MB. Photos are compressed automatically. All uploaded files together must be 10 MB or smaller.
       </p>
 
       <div className="document-grid">
@@ -1971,7 +1968,6 @@ export default function ApplicantRegistration() {
             </div>
           ) : (
           <>
-          {draftRestored && <p className="draft-status" role="status">Your saved application form was restored on this device.</p>}
           {draftError && <p className="form-error" role="alert">{draftError}</p>}
           <div className="form-section">
             <div className="registration-form-heading">

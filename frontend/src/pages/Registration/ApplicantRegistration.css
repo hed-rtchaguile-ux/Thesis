@@ -122,16 +122,6 @@
   min-width: 0;
 }
 
-.draft-status {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(61, 110, 82, 0.24);
-  border-radius: 8px;
-  background: rgba(232, 245, 236, 0.9);
-  color: #315a40;
-  font-size: 13px;
-}
-
 .registration-header {
   display: flex;
   align-items: center;
