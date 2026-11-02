@@ -3,7 +3,7 @@ const ExcelJS = require('exceljs');
 
 const FORM_ROWS = 98;
 const FORM_COLUMNS = 33;
-const TEMPLATE_PATH = path.join(__dirname, '..', 'frontend', 'public', 'marriage-license-template.xlsx');
+const TEMPLATE_PATH = path.join(__dirname, 'marriage-license-template.xlsx');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function join(values, separator = ', ') {
