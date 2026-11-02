@@ -135,6 +135,15 @@ body {
   background: #f7f9f5;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 #root {
   width: 100%;
   max-width: none;

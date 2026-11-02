@@ -9,6 +9,8 @@ const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marit
 const MAX_DOCUMENT_FILE_BYTES = 2 * 1024 * 1024
 const MAX_TOTAL_DOCUMENT_BYTES = 8 * 1024 * 1024
 const MAX_COMPRESSED_IMAGE_BYTES = 1024 * 1024
+const REGISTRATION_DRAFT_TTL = 24 * 60 * 60 * 1000
+let registrationDraftDatabasePromise
 const appointmentTimeOptions = [
   { value: '09:00', label: '9:00 AM' },
   { value: '10:00', label: '10:00 AM' },
@@ -462,6 +464,53 @@ function FieldError({ message }) {
   return message ? <span className="field-error" role="alert">{message}</span> : null
 }
 
+function openRegistrationDraftDatabase() {
+  if (!registrationDraftDatabasePromise) {
+    registrationDraftDatabasePromise = new Promise((resolve, reject) => {
+      const request = window.indexedDB.open('wedrings-registration-drafts', 1)
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore('drafts', { keyPath: 'userEmail' })
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error || new Error('Unable to open local draft storage.'))
+    })
+  }
+  return registrationDraftDatabasePromise
+}
+
+async function getRegistrationDraft(userEmail) {
+  const database = await openRegistrationDraftDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readonly')
+    const request = transaction.objectStore('drafts').get(userEmail)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error || new Error('Unable to restore the saved application form.'))
+    transaction.onabort = () => reject(transaction.error || new Error('Unable to restore the saved application form.'))
+  })
+}
+
+async function saveRegistrationDraft(draft) {
+  const database = await openRegistrationDraftDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readwrite')
+    transaction.objectStore('drafts').put(draft)
+    transaction.oncomplete = resolve
+    transaction.onerror = () => reject(transaction.error || new Error('Unable to save the application draft.'))
+    transaction.onabort = () => reject(transaction.error || new Error('Unable to save the application draft.'))
+  })
+}
+
+async function deleteRegistrationDraft(userEmail) {
+  const database = await openRegistrationDraftDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readwrite')
+    transaction.objectStore('drafts').delete(userEmail)
+    transaction.oncomplete = resolve
+    transaction.onerror = () => reject(transaction.error || new Error('Unable to clear the saved application form.'))
+    transaction.onabort = () => reject(transaction.error || new Error('Unable to clear the saved application form.'))
+  })
+}
+
 export default function ApplicantRegistration() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -471,6 +520,9 @@ export default function ApplicantRegistration() {
   const [step, setStep] = useState(1)
   const [personStep, setPersonStep] = useState(1)
   const [form, setForm] = useState(initialForm)
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftError, setDraftError] = useState('')
   const [applicationEligibility, setApplicationEligibility] = useState('checking')
   const [customDropdownFields, setCustomDropdownFields] = useState({})
   const [documents, setDocuments] = useState({})
@@ -508,6 +560,66 @@ export default function ApplicantRegistration() {
   const brideDocumentFields = getApplicantDocumentFields(form, 'bride')
   const personDocumentFields = person === 'groom' ? groomDocumentFields : brideDocumentFields
   const allDocumentFields = [...groomDocumentFields, ...brideDocumentFields]
+  const draftUserEmail = String(user?.email || '').trim().toLowerCase()
+
+  useEffect(() => {
+    let active = true
+    if (!draftUserEmail) {
+      setDraftLoaded(true)
+      return () => {
+        active = false
+      }
+    }
+
+    getRegistrationDraft(draftUserEmail)
+      .then(async (draft) => {
+        if (!draft) return
+        if (Date.now() - draft.savedAt > REGISTRATION_DRAFT_TTL) {
+          await deleteRegistrationDraft(draftUserEmail)
+          return
+        }
+        if (!active) return
+
+        setForm({ ...initialForm, ...draft.form })
+        setStep(Number.isInteger(draft.step) && draft.step >= 1 && draft.step <= 5 ? draft.step : 1)
+        setPersonStep(Number.isInteger(draft.personStep) && draft.personStep >= 1 && draft.personStep <= 8 ? draft.personStep : 1)
+        setDocuments(draft.documents || {})
+        setCustomDropdownFields(draft.customDropdownFields || {})
+        setDraftRestored(true)
+      })
+      .catch((error) => {
+        console.error('Unable to restore the saved application form:', error)
+        if (active) setDraftError('Unable to restore the saved form on this device.')
+      })
+      .finally(() => {
+        if (active) setDraftLoaded(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [draftUserEmail])
+
+  useEffect(() => {
+    if (!draftLoaded || !draftUserEmail || applicationEligibility !== 'available') return undefined
+
+    const timeout = window.setTimeout(() => {
+      saveRegistrationDraft({
+        userEmail: draftUserEmail,
+        savedAt: Date.now(),
+        step,
+        personStep,
+        form,
+        documents,
+        customDropdownFields,
+      }).then(() => setDraftError('')).catch((error) => {
+        console.error('Unable to save the application draft:', error)
+        setDraftError('This form could not be saved on this device. Keep this page open until your application is submitted.')
+      })
+    }, 400)
+
+    return () => window.clearTimeout(timeout)
+  }, [applicationEligibility, customDropdownFields, documents, draftLoaded, draftUserEmail, form, personStep, step])
 
   useEffect(() => {
     let active = true
@@ -541,6 +653,11 @@ export default function ApplicantRegistration() {
   }
 
   function handleLogout() {
+    if (draftUserEmail) {
+      deleteRegistrationDraft(draftUserEmail).catch((error) => {
+        console.error('Unable to clear the saved application form:', error)
+      })
+    }
     logout()
     navigate('/login', { replace: true })
   }
@@ -598,6 +715,7 @@ export default function ApplicantRegistration() {
     setCustomDropdownFields({})
     setValidationErrors({})
     setSubmitError('')
+    setDraftRestored(false)
     setStep(1)
     setPersonStep(1)
     Object.values(fileInputRefs.current).forEach((input) => {
@@ -1079,6 +1197,22 @@ export default function ApplicantRegistration() {
     setIsSubmitting(true)
     setSubmitError('')
 
+    if (draftUserEmail) {
+      try {
+        await saveRegistrationDraft({
+          userEmail: draftUserEmail,
+          savedAt: Date.now(),
+          step,
+          personStep,
+          form,
+          documents,
+          customDropdownFields,
+        })
+      } catch (error) {
+        console.error('Unable to save the application before submission:', error)
+      }
+    }
+
     const submittedForm = {
       ...form,
       preferredAppointmentDate: form.appointmentDate,
@@ -1114,6 +1248,11 @@ export default function ApplicantRegistration() {
           ? 'The application documents are too large to submit. Reduce the file sizes and try again.'
           : 'Unable to submit application.')
         throw new Error(message)
+      }
+      if (draftUserEmail) {
+        deleteRegistrationDraft(draftUserEmail).catch((error) => {
+          console.error('Unable to clear the submitted application draft:', error)
+        })
       }
       navigate('/applicant/dashboard')
     } catch (error) {
@@ -1817,8 +1956,8 @@ export default function ApplicantRegistration() {
         </div>
 
         <section className="registration-card">
-          {applicationEligibility === 'checking' ? (
-            <p role="status">Checking whether this account can start an application...</p>
+          {!draftLoaded || applicationEligibility === 'checking' ? (
+            <p role="status">{!draftLoaded ? 'Restoring your saved application form...' : 'Checking whether this account can start an application...'}</p>
           ) : applicationEligibility === 'error' ? (
             <div className="application-eligibility-message">
               <p role="alert">We couldn't verify whether this account already has an application. Please try again.</p>
@@ -1832,6 +1971,8 @@ export default function ApplicantRegistration() {
             </div>
           ) : (
           <>
+          {draftRestored && <p className="draft-status" role="status">Your saved application form was restored on this device.</p>}
+          {draftError && <p className="form-error" role="alert">{draftError}</p>}
           <div className="form-section">
             <div className="registration-form-heading">
               <h2>{progressLabel}</h2>

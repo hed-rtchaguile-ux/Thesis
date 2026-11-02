@@ -1,6 +1,9 @@
 .registration-page {
   display: flex;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
   min-height: 100vh;
   margin: 0;
   background: #f4f4f2;
@@ -102,9 +105,31 @@
 
 .registration-main {
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 14px 20px 18px;
   background: #f4f4f2;
   box-sizing: border-box;
+}
+
+.registration-card,
+.form-section,
+.formal-box,
+.two-box-layout,
+.form-grid,
+.field-group {
+  min-width: 0;
+}
+
+.draft-status {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(61, 110, 82, 0.24);
+  border-radius: 8px;
+  background: rgba(232, 245, 236, 0.9);
+  color: #315a40;
+  font-size: 13px;
 }
 
 .registration-header {
@@ -1039,7 +1064,7 @@
 
   .stepper {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
   }
 }
@@ -1057,7 +1082,7 @@
   }
 
   .stepper {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 3px;
     margin-bottom: 10px;
     padding-bottom: 10px;
