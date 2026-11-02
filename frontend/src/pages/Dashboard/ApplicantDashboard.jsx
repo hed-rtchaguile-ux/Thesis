@@ -6,7 +6,7 @@ import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
 import './ApplicantDashboard.css'
 
-const FIXED_PAYMENT_METHOD = 'Cash'
+const FIXED_PAYMENT_METHOD = 'Over the counter (Cash)'
 const FIXED_PAYMENT_AMOUNT = '₱ 500.00'
 
 export default function ApplicantDashboard() {
