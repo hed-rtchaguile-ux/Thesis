@@ -6,6 +6,9 @@ import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
 const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marital history', 'Father details', 'Mother details', 'Person who gave advice', 'Documents']
+const MAX_DOCUMENT_FILE_BYTES = 2 * 1024 * 1024
+const MAX_TOTAL_DOCUMENT_BYTES = 8 * 1024 * 1024
+const MAX_COMPRESSED_IMAGE_BYTES = 1024 * 1024
 const appointmentTimeOptions = [
   { value: '09:00', label: '9:00 AM' },
   { value: '10:00', label: '10:00 AM' },
@@ -24,6 +27,54 @@ function formatAppointmentTime(value) {
   const period = hour >= 12 ? 'PM' : 'AM'
   const displayHour = hour % 12 || 12
   return `${displayHour}:${match[2]} ${period}`
+}
+
+function getDataUrlSize(dataUrl) {
+  const base64 = dataUrl.split(',')[1] || ''
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  return Math.floor((base64.length * 3) / 4) - padding
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error || new Error('Unable to read this file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function compressDocumentImage(file) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return file
+
+  const bitmap = await createImageBitmap(file)
+  try {
+    const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Unable to process this photo.')
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+    let compressedBlob
+    for (const quality of [0.82, 0.72, 0.62, 0.52]) {
+      compressedBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+      if (!compressedBlob) throw new Error('Unable to compress this photo.')
+      if (compressedBlob.size <= MAX_COMPRESSED_IMAGE_BYTES) break
+    }
+
+    if (compressedBlob.size >= file.size) return file
+    const fileName = file.name.replace(/\.[^.]+$/, '') || 'application-photo'
+    return new File([compressedBlob], `${fileName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })
+  } finally {
+    bitmap.close()
+  }
 }
 
 const documentFields = {
@@ -423,6 +474,8 @@ export default function ApplicantRegistration() {
   const [applicationEligibility, setApplicationEligibility] = useState('checking')
   const [customDropdownFields, setCustomDropdownFields] = useState({})
   const [documents, setDocuments] = useState({})
+  const [processingDocuments, setProcessingDocuments] = useState({})
+  const isProcessingDocument = Object.values(processingDocuments).some(Boolean)
   const [countryMetadata, setCountryMetadata] = useState(null)
   const [countryMetadataStatus, setCountryMetadataStatus] = useState('idle')
   const [cityData, setCityData] = useState({})
@@ -985,6 +1038,9 @@ export default function ApplicantRegistration() {
       personDocumentFields.filter(({ label }) => label.endsWith('*')).forEach(({ key }) => {
         if (!documents[key]) errors[key] = 'This document is required.'
       })
+      personDocumentFields.forEach(({ key }) => {
+        if (processingDocuments[key]) errors[key] = 'Wait for the file to finish processing.'
+      })
     }
 
     return errors
@@ -1068,23 +1124,48 @@ export default function ApplicantRegistration() {
     }
   }
 
-  function handleDocumentSelect(key, event) {
+  async function handleDocumentSelect(key, event) {
     const selectedFile = event.target.files?.[0]
     if (!selectedFile) return
+    event.target.value = ''
+    if (selectedFile.size > MAX_DOCUMENT_FILE_BYTES) {
+      setValidationErrors((current) => ({ ...current, [key]: 'Each file must be 2 MB or smaller.' }))
+      return
+    }
 
-    const reader = new FileReader()
-    reader.onload = () => {
+    setProcessingDocuments((current) => ({ ...current, [key]: true }))
+    setValidationErrors((current) => ({ ...current, [key]: '' }))
+    try {
+      const processedFile = await compressDocumentImage(selectedFile)
+      const dataUrl = await readFileAsDataUrl(processedFile)
+      const currentTotalBytes = Object.entries(documents)
+        .filter(([documentKey]) => documentKey !== key)
+        .reduce((total, [, document]) => {
+          const existingDataUrl = typeof document === 'string' ? document : document.dataUrl
+          return total + (existingDataUrl ? getDataUrlSize(existingDataUrl) : 0)
+        }, 0)
+
+      if (currentTotalBytes + processedFile.size > MAX_TOTAL_DOCUMENT_BYTES) {
+        throw new Error('All application documents together must be 8 MB or smaller.')
+      }
+
       setDocuments((current) => ({
         ...current,
         [key]: {
-          name: selectedFile.name,
-          type: selectedFile.type,
-          dataUrl: reader.result,
+          name: processedFile.name,
+          type: processedFile.type,
+          dataUrl,
         },
       }))
       setValidationErrors((current) => ({ ...current, [key]: '' }))
+    } catch (error) {
+      setValidationErrors((current) => ({
+        ...current,
+        [key]: error.message || 'Unable to process this file.',
+      }))
+    } finally {
+      setProcessingDocuments((current) => ({ ...current, [key]: false }))
     }
-    reader.readAsDataURL(selectedFile)
   }
 
   const renderGroomBrideForm = () => {
@@ -1479,6 +1560,9 @@ export default function ApplicantRegistration() {
       <div className="registration-section-title-row">
         <div className="formal-box-title">{title}</div>
       </div>
+      <p className="section-subtitle">
+        Each photo or PDF must be 2 MB or smaller. Photos are compressed automatically. All uploaded files together must be 8 MB or smaller.
+      </p>
 
       <div className="document-grid">
         {fields.map(({ key, label, accept = 'image/*,.pdf' }) => (
@@ -1486,6 +1570,7 @@ export default function ApplicantRegistration() {
             key={key}
             type="button"
             className="document-upload-card"
+            disabled={isProcessingDocument}
             onClick={() => fileInputRefs.current[key]?.click()}
           >
             <input
@@ -1494,12 +1579,19 @@ export default function ApplicantRegistration() {
               }}
               type="file"
               accept={accept}
+              disabled={isProcessingDocument}
               onChange={(event) => handleDocumentSelect(key, event)}
               className="hidden-file-input"
             />
             <span className="upload-icon">⇪</span>
             <span className="upload-label">{label}</span>
-            <span className="upload-file-name">{documents[key] ? (typeof documents[key] === 'string' ? documents[key] : documents[key].name) : 'Choose File'}</span>
+            <span className="upload-file-name">
+              {processingDocuments[key]
+                ? 'Processing photo...'
+                : documents[key]
+                  ? typeof documents[key] === 'string' ? documents[key] : documents[key].name
+                  : 'Choose File'}
+            </span>
             <FieldError message={validationErrors[key]} />
           </button>
         ))}
