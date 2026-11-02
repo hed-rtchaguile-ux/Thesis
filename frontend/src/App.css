@@ -8,12 +8,18 @@
 }
 
 .app-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
+  flex: 0 0 220px;
   width: 220px;
+  align-self: stretch;
+  height: auto;
+  min-height: 100vh;
   padding: 18px 12px 14px;
   background: linear-gradient(180deg, #1d2440 0%, #1a2139 100%);
   color: #eef1ff;
+  overflow: visible;
 }
 
 .app-sidebar .brand-row {
@@ -181,7 +187,12 @@
   }
 
   .app-sidebar {
+    position: static;
+    flex-basis: auto;
     width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
 
   .app-sidebar .brand-row {
@@ -334,9 +345,6 @@
     .portal-switch { margin-top: 30px; color: var(--muted); font-size: 13px; }
     .portal-switch a, .text-button { color: var(--deep-sage); font-weight: 700; text-decoration: none; }
     .admin-portal .portal-switch a { color: var(--admin); }
-    .demo-access { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 15px; color: var(--muted); font-size: 12px; }
-    .demo-access summary { cursor: pointer; color: var(--deep-sage); font-weight: 600; }
-    .demo-access p { line-height: 1.7; }
     .mobile-brand { display: none; }
 
     .dashboard-shell { min-height: calc(100svh - 64px); max-width: 1240px; margin: 32px auto; background: linear-gradient(135deg, #f3efe9 0%, #e8e1db 100%); border: 1px solid rgba(120, 118, 113, 0.2); box-shadow: 0 20px 45px rgba(74, 63, 55, 0.08); overflow: hidden; }

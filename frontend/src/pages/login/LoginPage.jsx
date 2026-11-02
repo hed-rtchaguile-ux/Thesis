@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { demoAccounts, useAuth } from '../auth'
+import { useAuth } from '../auth'
 import logoImage from '../../assets/wedrings-mark.png'
 import './LoginPage.css'
 
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -37,7 +38,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login-shell">
+    <main className="login-shell login-page-shell">
       <section className="login-intro">
         <Link className="brand" to="/">
           <span className="brand-mark" aria-label="WedRings logo">
@@ -45,9 +46,6 @@ export default function LoginPage() {
           </span>
           <span className="brand-name">WEDRINGS</span>
         </Link>
-
-        
-
       </section>
 
       <section className="login-panel">
@@ -61,8 +59,38 @@ export default function LoginPage() {
 
             <label htmlFor="login-password">Password</label>
             <div className="password-wrap">
-              <input id="login-password" type="password" placeholder="Enter your password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-              <span className="password-eye" aria-hidden="true">◌</span>
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  {showPassword ? (
+                    <>
+                      <path d="M3 3l18 18" />
+                      <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                      <path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c5.5 0 9 7 9 7a15.7 15.7 0 0 1-3.1 3.8" />
+                      <path d="M6.2 6.2C3.9 7.7 3 12 3 12s3.5 7 9 7a10.7 10.7 0 0 0 4.1-.8" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7Z" />
+                      <circle cx="12" cy="12" r="2.5" />
+                    </>
+                  )}
+                </svg>
+              </button>
             </div>
 
             <div className="form-options">
@@ -79,12 +107,6 @@ export default function LoginPage() {
 
           <p className="signup-link">Don't have an account? <Link to="/register">Register</Link></p>
 
-          <details className="demo-access">
-            <summary>View demo access</summary>
-            <p><strong>Applicant:</strong> {demoAccounts.applicant.email}<br />{demoAccounts.applicant.password}</p>
-            <p><strong>Admin:</strong> {demoAccounts.admin.email}<br />{demoAccounts.admin.password}</p>
-            <p><strong>Super Admin:</strong> {demoAccounts.superadmin.email}<br />{demoAccounts.superadmin.password}</p>
-          </details>
         </div>
       </section>
     </main>

@@ -16,6 +16,15 @@
   overflow: hidden;
 }
 
+.login-shell.login-page-shell {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+}
+
 .login-intro {
   position: relative;
   display: flex;
@@ -169,13 +178,54 @@
   position: relative;
 }
 
-.password-eye {
+.password-wrap input {
+  padding-right: 48px;
+}
+
+.login-form .password-toggle {
   position: absolute;
-  right: 14px;
+  z-index: 1;
+  right: 6px;
   top: 50%;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #647064;
+  background: transparent;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
   transform: translateY(-50%);
-  color: #8c8e8b;
-  font-size: 16px;
+  transition: none;
+  cursor: pointer;
+}
+
+.login-form .password-toggle:hover {
+  color: #344735;
+  background: transparent;
+  transform: translateY(-50%);
+}
+
+.login-form .password-toggle:focus-visible {
+  outline: 2px solid #7b8b76;
+  outline-offset: 1px;
+  background: transparent;
+}
+
+.password-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .form-options {
@@ -258,24 +308,6 @@
   color: var(--muted);
   font-size: 13px;
   text-align: center;
-}
-
-.demo-access {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 14px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.demo-access summary {
-  cursor: pointer;
-  color: var(--deep-sage);
-  font-weight: 600;
-}
-
-.demo-access p {
-  line-height: 1.7;
 }
 
 @media (max-width: 760px) {
