@@ -24,6 +24,7 @@ const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI;
 const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'));
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
+const APPLICATION_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 const FIXED_PAYMENT_METHOD = 'Cash';
 const FIXED_PAYMENT_AMOUNT = '₱ 500.00';
 const scrypt = promisify(crypto.scrypt);
@@ -76,6 +77,7 @@ const accountSchema = new mongoose.Schema({
   passwordResetCodeHash: String,
   passwordResetCodeAttempts: { type: Number, default: 0 },
   activeApplicationId: mongoose.Schema.Types.ObjectId,
+  activeApplicationClaimedAt: Date,
   role: { type: String, required: true, enum: ['applicant', 'admin', 'superadmin'] },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -751,11 +753,44 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     }
 
     claimedApplicationId = new mongoose.Types.ObjectId();
-    const accountClaim = await ApplicantAccount.findOneAndUpdate(
+    let accountClaim = await ApplicantAccount.findOneAndUpdate(
       { _id: req.user.id, activeApplicationId: { $exists: false } },
-      { $set: { activeApplicationId: claimedApplicationId } },
-      { new: true },
+      { $set: { activeApplicationId: claimedApplicationId, activeApplicationClaimedAt: new Date() } },
+      { returnDocument: 'after' },
     ).lean();
+
+    if (!accountClaim) {
+      const currentAccount = await ApplicantAccount.findById(req.user.id)
+        .select('activeApplicationId activeApplicationClaimedAt updatedAt')
+        .lean();
+      const claimCreatedAt = currentAccount?.activeApplicationClaimedAt || currentAccount?.updatedAt;
+      const claimIsStale = currentAccount?.activeApplicationId
+        && claimCreatedAt
+        && Date.now() - new Date(claimCreatedAt).getTime() >= APPLICATION_CLAIM_TIMEOUT_MS;
+
+      if (claimIsStale) {
+        const staleClaimFilter = {
+          _id: req.user.id,
+          activeApplicationId: currentAccount.activeApplicationId,
+          updatedAt: currentAccount.updatedAt,
+        };
+        if (currentAccount.activeApplicationClaimedAt) {
+          staleClaimFilter.activeApplicationClaimedAt = currentAccount.activeApplicationClaimedAt;
+        } else {
+          staleClaimFilter.activeApplicationClaimedAt = { $exists: false };
+        }
+
+        await ApplicantAccount.updateOne(staleClaimFilter, {
+          $unset: { activeApplicationId: 1, activeApplicationClaimedAt: 1 },
+        });
+        accountClaim = await ApplicantAccount.findOneAndUpdate(
+          { _id: req.user.id, activeApplicationId: { $exists: false } },
+          { $set: { activeApplicationId: claimedApplicationId, activeApplicationClaimedAt: new Date() } },
+          { returnDocument: 'after' },
+        ).lean();
+      }
+    }
+
     if (!accountClaim) {
       claimedApplicationId = null;
       return res.status(409).json({
@@ -786,7 +821,7 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     if (claimedApplicationId) {
       await ApplicantAccount.updateOne(
         { _id: req.user.id, activeApplicationId: claimedApplicationId },
-        { $unset: { activeApplicationId: 1 } },
+        { $unset: { activeApplicationId: 1, activeApplicationClaimedAt: 1 } },
       );
     }
     res.status(400).json({ message: 'Unable to save application.', error: error.message });
@@ -869,7 +904,7 @@ app.put('/api/applications/:id/deletion-request/review', requireRoles(['admin', 
 
     await ApplicantAccount.updateOne(
       { email: existingApplication.applicantEmail },
-      { $unset: { activeApplicationId: 1 } },
+      { $unset: { activeApplicationId: 1, activeApplicationClaimedAt: 1 } },
     );
     const deletion = await Application.deleteOne({
       _id: existingApplication._id,
