@@ -1,5 +1,6 @@
 .app-shell {
   display: flex;
+  align-items: stretch;
   width: 100%;
   min-height: 100vh;
   margin: 0;
@@ -172,6 +173,8 @@
 }
 
 .app-content {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 100vh;

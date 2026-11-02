@@ -348,7 +348,7 @@
 
 .dashboard-panel {
   padding-top: 6px;
-  height: calc(100vh - 140px);
+  min-height: calc(100vh - 140px);
 }
 
 .welcome-banner {
@@ -724,6 +724,11 @@
 .application-item > .application-actions {
   flex-direction: row;
   align-items: center;
+}
+
+.application-actions > button {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .application-view-button,
@@ -1108,6 +1113,8 @@
 
 .applicant-detail-heading .application-edit-button {
   flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
   padding: 7px 10px;
   font-size: 11px;
 }
@@ -2268,8 +2275,20 @@
 
   .application-view-button,
   .application-edit-button {
-    width: 100%;
     min-height: 42px;
+  }
+
+  .application-actions > .application-view-button,
+  .application-actions > .application-edit-button,
+  .application-actions > .application-deletion-request-button {
+    width: auto;
+    flex: 0 1 auto;
+    white-space: normal;
+  }
+
+  .applicant-detail-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .applicant-modal-backdrop {
