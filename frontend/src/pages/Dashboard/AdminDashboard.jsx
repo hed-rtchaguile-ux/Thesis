@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
@@ -36,6 +36,10 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   const [loadError, setLoadError] = useState('')
   const [showAllApplications, setShowAllApplications] = useState(false)
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
+  const [selectedApplicationDetails, setSelectedApplicationDetails] = useState(null)
+  const [detailsError, setDetailsError] = useState('')
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  const detailsRequestRef = useRef(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
 
@@ -51,6 +55,32 @@ export default function AdminDashboard({ view = 'dashboard' }) {
         setLoadError(error.message)
       })
   }, [])
+
+  async function toggleApplicationDetails(applicationId) {
+    if (selectedApplicationId === applicationId) {
+      detailsRequestRef.current += 1
+      setSelectedApplicationId('')
+      setLoadingDetails(false)
+      return
+    }
+
+    const requestId = detailsRequestRef.current + 1
+    detailsRequestRef.current = requestId
+    setSelectedApplicationId(applicationId)
+    setSelectedApplicationDetails(null)
+    setLoadingDetails(true)
+    setDetailsError('')
+    try {
+      const response = await apiFetch(`/api/applications/${applicationId}`)
+      if (!response.ok) throw new Error('Unable to load application details.')
+      const application = await response.json()
+      if (detailsRequestRef.current === requestId) setSelectedApplicationDetails(application)
+    } catch (error) {
+      if (detailsRequestRef.current === requestId) setDetailsError(error.message)
+    } finally {
+      if (detailsRequestRef.current === requestId) setLoadingDetails(false)
+    }
+  }
 
   function signOut() {
     logout()
@@ -139,20 +169,24 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                       {view === 'appointments' && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     </div>
-                    <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>
+                    <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>
                       {detailsOpen ? 'Hide details' : 'View details'}
                     </button>
                     {view !== 'appointments' && application.status === 'Verified' && <LicenseReleaseControl application={application} onSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))} />}
                   </div>
-                  {detailsOpen && <ApplicationDetails
-                    application={application}
+                  {detailsOpen && (loadingDetails
+                    ? <p className="admin-empty-state">Loading application details...</p>
+                    : detailsError
+                      ? <p className="admin-empty-state" role="alert">{detailsError}</p>
+                      : selectedApplicationDetails?._id === application._id && <ApplicationDetails
+                    application={selectedApplicationDetails}
                     onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
                     onDeletionReviewed={(result) => setApplications((currentApplications) => (
                       result.deleted
                         ? currentApplications.filter((item) => item._id !== result.applicationId)
                         : currentApplications.map((item) => item._id === result.application._id ? result.application : item)
                     ))}
-                  />}
+                  />)}
                 </div>
               )
             })}

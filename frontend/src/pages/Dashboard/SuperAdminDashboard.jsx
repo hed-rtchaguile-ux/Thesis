@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
@@ -34,6 +34,10 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   const [applications, setApplications] = useState([])
   const [updatingId, setUpdatingId] = useState('')
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
+  const [selectedApplicationDetails, setSelectedApplicationDetails] = useState(null)
+  const [detailsError, setDetailsError] = useState('')
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  const detailsRequestRef = useRef(0)
   const [updatingDocumentKey, setUpdatingDocumentKey] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -54,6 +58,36 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
         setLoadError(error.message || 'Unable to load applications.')
       })
   }, [])
+
+  async function toggleApplicationDetails(applicationId) {
+    if (selectedApplicationId === applicationId) {
+      closeApplicationDetails()
+      return
+    }
+
+    const requestId = detailsRequestRef.current + 1
+    detailsRequestRef.current = requestId
+    setSelectedApplicationId(applicationId)
+    setSelectedApplicationDetails(null)
+    setLoadingDetails(true)
+    setDetailsError('')
+    try {
+      const response = await apiFetch(`/api/applications/${applicationId}`)
+      if (!response.ok) throw new Error('Unable to load application details.')
+      const application = await response.json()
+      if (detailsRequestRef.current === requestId) setSelectedApplicationDetails(application)
+    } catch (error) {
+      if (detailsRequestRef.current === requestId) setDetailsError(error.message)
+    } finally {
+      if (detailsRequestRef.current === requestId) setLoadingDetails(false)
+    }
+  }
+
+  function closeApplicationDetails() {
+    detailsRequestRef.current += 1
+    setSelectedApplicationId('')
+    setLoadingDetails(false)
+  }
 
   async function updateApplicationStatus(applicationId, status) {
     setUpdatingId(applicationId)
@@ -254,7 +288,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                       {!isAppointmentsPage && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                     </div>
-                    <button className="admin-details-button" type="button" onClick={() => setSelectedApplicationId((currentId) => currentId === application._id ? '' : application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
+                    <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
                     {isAppointmentsPage && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     {!isAppointmentsPage && <>
                       {!isAdmin && <>
@@ -274,27 +308,29 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
 
       {selectedApplication && (
         <div className="review-modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setSelectedApplicationId('')
+          if (event.target === event.currentTarget) closeApplicationDetails()
         }}>
           <section className="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
             <div className="review-modal-header">
               <div><span className="admin-review-kicker">Super admin review</span><h2 id="review-modal-title">Application details</h2></div>
-              <button type="button" className="review-modal-close" aria-label="Close application details" onClick={() => setSelectedApplicationId('')}>x</button>
+              <button type="button" className="review-modal-close" aria-label="Close application details" onClick={closeApplicationDetails}>x</button>
             </div>
-          <SuperAdminApplicationDetails
-            application={selectedApplication}
-            updatingDocumentKey={updatingDocumentKey}
-            onDocumentReview={updateDocumentReview}
-            onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
-            onDeletionReviewed={(result) => {
-              if (result.deleted) {
-                setApplications((currentApplications) => currentApplications.filter((item) => item._id !== result.applicationId))
-                setSelectedApplicationId('')
-              } else {
-                setApplications((currentApplications) => currentApplications.map((item) => item._id === result.application._id ? result.application : item))
-              }
-            }}
-          />
+          {loadingDetails ? <p className="admin-empty-state">Loading application details...</p>
+            : detailsError ? <p className="admin-empty-state" role="alert">{detailsError}</p>
+              : selectedApplicationDetails?._id === selectedApplication._id && <SuperAdminApplicationDetails
+                application={selectedApplicationDetails}
+                updatingDocumentKey={updatingDocumentKey}
+                onDocumentReview={updateDocumentReview}
+                onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+                onDeletionReviewed={(result) => {
+                  if (result.deleted) {
+                    setApplications((currentApplications) => currentApplications.filter((item) => item._id !== result.applicationId))
+                    closeApplicationDetails()
+                  } else {
+                    setApplications((currentApplications) => currentApplications.map((item) => item._id === result.application._id ? result.application : item))
+                  }
+                }}
+              />}
           </section>
         </div>
       )}

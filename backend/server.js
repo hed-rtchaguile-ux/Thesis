@@ -886,12 +886,15 @@ app.put('/api/applications/:id/deletion-request/review', requireRoles(['admin', 
 app.get('/api/applications', requireRoles(['applicant', 'admin', 'superadmin']), async (req, res) => {
   try {
     const filter = req.user.role === 'applicant' ? { applicantEmail: req.user.email } : {};
-    const applications = await Application.find(filter)
-      .sort({ createdAt: -1 })
-      .lean();
+    const applicationQuery = Application.find(filter).sort({ createdAt: -1 });
+    if (req.user.role !== 'applicant') {
+      applicationQuery.select('-documents -paymentReceipt');
+    }
+    const applications = await applicationQuery.lean();
     res.set('Cache-Control', 'no-store');
     res.json(applications);
   } catch (error) {
+    console.error('Unable to load applications:', error.message);
     res.status(500).json({ message: 'Unable to load applications.', error: error.message });
   }
 });
