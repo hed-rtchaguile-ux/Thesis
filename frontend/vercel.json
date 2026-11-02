@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://wedrings-villaverde.onrender.com/api/$1"
+      "destination": "https://thesis-zjrs.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",
