@@ -7,7 +7,7 @@ const systemDns = require('node:dns');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { buildPrintFormPdf } = require('./printForm');
+const { buildPrintFormDocument } = require('./printForm');
 
 const { sendApplicantNotification } = require('./applicantNotifications');
 
@@ -910,10 +910,9 @@ app.get('/api/applications/:id/print', requireRoles(['applicant', 'admin', 'supe
       return res.status(404).json({ message: 'Application not found.' });
     }
 
-    const printForm = await buildPrintFormPdf(application);
+    const printForm = await buildPrintFormDocument(application);
     res.set('Cache-Control', 'no-store');
-    res.set('Content-Disposition', 'inline; filename="marriage-license-application.pdf"');
-    res.type('application/pdf').send(printForm);
+    res.type('html').send(printForm);
   } catch (error) {
     console.error('Application print form error:', error.message);
     res.status(500).json({

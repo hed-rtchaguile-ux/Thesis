@@ -17,9 +17,10 @@ export async function printExcelForm(applicationId) {
       throw new Error(result?.message || `Unable to prepare the application form for printing (${response.status}).`)
     }
 
-    const pdfUrl = URL.createObjectURL(await response.blob())
-    printWindow.location.replace(pdfUrl)
-    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000)
+    const html = await response.text()
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
   } catch (error) {
     printWindow.close()
     window.alert(error.message)

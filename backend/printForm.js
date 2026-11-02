@@ -1,36 +1,10 @@
 const path = require('node:path');
-const os = require('node:os');
-const fs = require('node:fs/promises');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const { pathToFileURL } = require('node:url');
 const ExcelJS = require('exceljs');
 
 const FORM_ROWS = 98;
 const FORM_COLUMNS = 33;
 const TEMPLATE_PATH = path.join(__dirname, '..', 'frontend', 'public', 'marriage-license-template.xlsx');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const execFileAsync = promisify(execFile);
-const PDF_BROWSER_PATHS = [
-  process.env.CHROME_PATH,
-  process.env.EDGE_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-].filter(Boolean);
-
-async function findPdfBrowser() {
-  for (const browserPath of PDF_BROWSER_PATHS) {
-    try {
-      await fs.access(browserPath);
-      return browserPath;
-    } catch {
-    }
-  }
-
-  throw new Error('Install Chrome or Edge, or set CHROME_PATH or EDGE_PATH to its executable.');
-}
 
 function join(values, separator = ', ') {
   return values.filter(Boolean).join(separator);
@@ -197,24 +171,20 @@ function fillTemplate(sheet, application) {
   return formValueCells;
 }
 
-async function buildPrintFormPdf(application) {
-  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'wedrings-print-'));
-  const htmlPath = path.join(tempDirectory, 'application.html');
-  const pdfPath = path.join(tempDirectory, 'application.pdf');
-
-  try {
-    const formTable = await buildPrintFormHtml(application);
-    const html = `<!doctype html>
+async function buildPrintFormDocument(application) {
+  const formTable = await buildPrintFormHtml(application);
+  return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
+  <title>Marriage License Application</title>
   <style>
-    @page { size: 8.5in 13in; margin: 0.25in; }
+    @page { size: 8.5in 13in; margin: 0; }
     * { box-sizing: border-box; }
     html, body { width: 100%; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; }
-    .print-page { width: 8in; height: 12.5in; overflow: hidden; }
-    .excel-form-table { width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 0; transform-origin: top left; }
+    .print-page { width: 8.5in; height: 13in; overflow: hidden; }
+    .excel-form-table { width: 100%; min-width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 0; transform-origin: top left; }
     .excel-form-table td { box-sizing: border-box; }
   </style>
 </head>
@@ -226,40 +196,42 @@ async function buildPrintFormPdf(application) {
       const table = page?.querySelector('.excel-form-table');
       if (!page || !table) throw new Error('The marriage license form could not be laid out for printing.');
 
-      const formHeight = table.getBoundingClientRect().height;
-      const printableHeight = 12.5 * 96;
-      const pageFillFactor = 1.25;
-      if (!formHeight) throw new Error('The marriage license form has no printable dimensions.');
+      const pageBounds = page.getBoundingClientRect();
+      const contentBounds = Array.from(table.querySelectorAll('td')).reduce((bounds, cell) => {
+        const style = getComputedStyle(cell);
+        const hasBorder = [style.borderTopStyle, style.borderRightStyle, style.borderBottomStyle, style.borderLeftStyle]
+          .some((borderStyle) => borderStyle !== 'none');
+        if (!cell.textContent.trim() && !hasBorder) return bounds;
 
-      table.style.transform = \`scaleY(\${Math.min(1, (printableHeight / formHeight) * pageFillFactor)})\`;
+        const cellBounds = cell.getBoundingClientRect();
+        bounds.left = Math.min(bounds.left, cellBounds.left);
+        bounds.top = Math.min(bounds.top, cellBounds.top);
+        bounds.right = Math.max(bounds.right, cellBounds.right);
+        bounds.bottom = Math.max(bounds.bottom, cellBounds.bottom);
+        return bounds;
+      }, { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+      const contentWidth = contentBounds.right - contentBounds.left;
+      const contentHeight = contentBounds.bottom - contentBounds.top;
+      if (!contentWidth || !contentHeight) throw new Error('The marriage license form has no printable dimensions.');
+
+      const verticalMargin = 0.3 * 96;
+      const targetWidth = pageBounds.width * 0.94;
+      const bottomMargin = pageBounds.height * 0.02;
+      const targetHeight = pageBounds.height - verticalMargin - bottomMargin;
+      const scaleX = targetWidth / contentWidth;
+      const scaleY = targetHeight / contentHeight;
+      const horizontalOffset = (pageBounds.width - targetWidth) / 2;
+      const offsetX = horizontalOffset - (scaleX * contentBounds.left);
+      const offsetY = verticalMargin - (scaleY * contentBounds.top);
+      table.style.transform = \`translate(\${offsetX}px, \${offsetY}px) scale(\${scaleX}, \${scaleY})\`;
     })();
+    window.addEventListener('load', () => {
+      window.focus();
+      window.print();
+    }, { once: true });
   </script>
 </body>
 </html>`;
-    await fs.writeFile(htmlPath, html, 'utf8');
-
-    const browserPath = await findPdfBrowser();
-    await execFileAsync(browserPath, [
-      '--headless',
-      '--disable-gpu',
-      '--disable-extensions',
-      '--disable-background-networking',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--no-pdf-header-footer',
-      `--user-data-dir=${path.join(tempDirectory, 'browser-profile')}`,
-      `--print-to-pdf=${pdfPath}`,
-      pathToFileURL(htmlPath).href,
-    ], { timeout: 30000 });
-
-    const pdf = await fs.readFile(pdfPath);
-    if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
-      throw new Error('The browser did not produce a valid PDF file.');
-    }
-    return pdf;
-  } finally {
-    await fs.rm(tempDirectory, { recursive: true, force: true });
-  }
 }
 
 function escapeHtml(value) {
@@ -297,7 +269,7 @@ function cellCss(cell, isTemplateText, mergedBorders = {}, isCenterPrompt = fals
     'vertical-align': alignment.vertical === 'center' ? 'middle' : alignment.vertical || 'top',
     'white-space': alignment.wrapText ? 'pre-wrap' : 'nowrap',
     'font-family': `${font.name || 'Arial'}, sans-serif`,
-    'font-size': `${isTemplateText ? fontSize : 8}pt`,
+    'font-size': `${isTemplateText ? fontSize + 1.5 : 9.5}pt`,
     'font-weight': isTemplateText ? (font.bold ? '700' : '400') : '700',
     'font-style': isTemplateText && font.italic ? 'italic' : 'normal',
     'text-decoration': font.underline ? 'underline' : 'none',
@@ -422,4 +394,4 @@ async function buildPrintFormHtml(application) {
   return `<table class="excel-form-table" aria-label="Completed Application for Marriage License"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>`;
 }
 
-module.exports = { buildPrintFormHtml, buildPrintFormPdf };
+module.exports = { buildPrintFormHtml, buildPrintFormDocument };
