@@ -79,6 +79,8 @@ function fillPerson(sheet, application, person, side, formValueCells) {
       cell.alignment = { ...(cell.alignment || {}), horizontal: 'left', vertical: 'middle', wrapText: true };
     } else if (['day', 'month', 'year', 'age'].includes(key)) {
       cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
+    } else if (['fatherResidence', 'motherResidence'].includes(key)) {
+      cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle', wrapText: true };
     }
     formValueCells.add(cell.address);
   };
