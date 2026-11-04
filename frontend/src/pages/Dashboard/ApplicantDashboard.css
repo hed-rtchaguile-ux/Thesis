@@ -1470,7 +1470,7 @@
   min-width: min(100%, 310px);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1200px) {
   .admin-application-row.has-license-release-control {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
