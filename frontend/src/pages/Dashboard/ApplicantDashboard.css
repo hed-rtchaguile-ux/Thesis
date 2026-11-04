@@ -1391,12 +1391,10 @@
   border-top: 1px solid rgba(125, 136, 168, 0.14);
 }
 
-@media (min-width: 761px) {
-  .admin-application-row.has-license-release-control > .admin-details-button,
-  .admin-application-row.has-license-release-control > .admin-verify-button,
-  .admin-application-row.has-license-release-control > .admin-reject-button {
-    align-self: flex-end;
-  }
+.admin-application-row.has-license-release-control > .admin-details-button,
+.admin-application-row.has-license-release-control > .admin-verify-button,
+.admin-application-row.has-license-release-control > .admin-reject-button {
+  align-self: flex-end;
 }
 
 .admin-avatar {
