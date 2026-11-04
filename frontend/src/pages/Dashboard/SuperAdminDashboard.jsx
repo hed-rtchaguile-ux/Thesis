@@ -106,6 +106,9 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
       setApplications((currentApplications) => currentApplications.map((application) => (
         application._id === updatedApplication._id ? updatedApplication : application
       )))
+      setSelectedApplicationDetails((currentApplication) => (
+        currentApplication?._id === updatedApplication._id ? updatedApplication : currentApplication
+      ))
     } finally {
       setUpdatingId('')
     }
