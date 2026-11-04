@@ -1391,12 +1391,6 @@
   border-top: 1px solid rgba(125, 136, 168, 0.14);
 }
 
-.admin-application-row.has-license-release-control > .admin-details-button,
-.admin-application-row.has-license-release-control > .admin-verify-button,
-.admin-application-row.has-license-release-control > .admin-reject-button {
-  align-self: flex-end;
-}
-
 .admin-avatar {
   display: grid;
   width: 36px;
@@ -1474,6 +1468,62 @@
   align-items: end;
   gap: 6px;
   min-width: min(100%, 310px);
+}
+
+@media (max-width: 980px) {
+  .admin-application-row.has-license-release-control {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+
+  .admin-application-row.has-license-release-control > .admin-avatar {
+    grid-column: 1;
+  }
+
+  .admin-application-row.has-license-release-control > .admin-application-copy {
+    grid-column: 2 / -1;
+    max-width: none;
+  }
+
+  .admin-application-row.has-license-release-control > .admin-details-button,
+  .admin-application-row.has-license-release-control > .admin-verify-button,
+  .admin-application-row.has-license-release-control > .admin-reject-button {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 4px;
+    text-align: center;
+  }
+
+  .admin-application-row.has-license-release-control > .license-release-control {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-application-row.has-license-release-control .license-release-control label,
+  .admin-application-row.has-license-release-control .license-release-control input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-application-row.has-license-release-control > .license-release-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-application-row.has-license-release-control .license-release-control .admin-verify-button {
+    width: 100%;
+  }
 }
 
 .license-release-control label {
