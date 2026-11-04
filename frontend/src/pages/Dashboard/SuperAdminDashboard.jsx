@@ -280,7 +280,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
 
               return (
                 <div key={application._id}>
-                  <div className="admin-application-row">
+                  <div className={`admin-application-row${!isAppointmentsPage && application.status === 'Verified' ? ' has-license-release-control' : ''}`}>
                     <span className="admin-avatar">{application.groomFullName?.slice(0, 1)}{application.brideFullName?.slice(0, 1)}</span>
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>

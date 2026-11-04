@@ -376,6 +376,11 @@
   outline: none;
 }
 
+.field-group input[type='date'] {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .field-group input::placeholder {
   color: #8f96aa;
 }

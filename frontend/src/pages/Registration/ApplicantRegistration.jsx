@@ -10,7 +10,7 @@ const MAX_DOCUMENT_FILE_BYTES = 5 * 1024 * 1024
 const MAX_TOTAL_DOCUMENT_BYTES = 10 * 1024 * 1024
 const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024
 const FIXED_PAYMENT_METHOD = 'Over the counter (Cash)'
-const FIXED_PAYMENT_AMOUNT = '₱ 500.00'
+const FIXED_PAYMENT_AMOUNT = '₱ 250.00'
 const REGISTRATION_DRAFT_TTL = 24 * 60 * 60 * 1000
 let registrationDraftDatabasePromise
 const appointmentTimeOptions = [
