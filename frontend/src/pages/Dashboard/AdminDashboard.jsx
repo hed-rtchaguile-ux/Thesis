@@ -8,6 +8,7 @@ import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
+import useApplicationDocuments from './useApplicationDocuments'
 import logoImage from '../../assets/wedrings-mark.png'
 import './ApplicantDashboard.css'
 
@@ -198,17 +199,17 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 }
 
 function ApplicationDetails({ application, onAppointmentSaved, onDeletionReviewed }) {
-  const documents = Object.entries(application.documents || {})
+  const { documents, paymentReceipt, isLoading: documentsLoading, error: documentsError } = useApplicationDocuments(application._id)
 
   return (
     <div className="admin-details-panel">
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
-      <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p>{application.paymentReceipt ? <><h5>Over-the-counter payment receipt</h5><DocumentPreview label="Payment receipt" value={application.paymentReceipt} /></> : <p><strong>Over-the-counter payment receipt:</strong> Not uploaded</p>}</div>
+      <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p>{documentsLoading ? <p>Loading payment receipt...</p> : documentsError ? <p className="admin-appointment-error" role="alert">{documentsError}</p> : paymentReceipt ? <><h5>Over-the-counter payment receipt</h5><DocumentPreview label="Payment receipt" value={paymentReceipt} /></> : <p><strong>Over-the-counter payment receipt:</strong> Not uploaded</p>}</div>
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <article className="admin-submitted-document" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /></article>) : <p>No documents listed.</p>}</div>
+        <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documentsLoading ? <p>Loading submitted documents...</p> : documentsError ? <p className="admin-appointment-error" role="alert">{documentsError}</p> : documents.length > 0 ? documents.map(([key, value]) => <article className="admin-submitted-document" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /></article>) : <p>No documents listed.</p>}</div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )
