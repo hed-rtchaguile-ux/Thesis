@@ -7,6 +7,7 @@ import SecondAppointmentControl from './SecondAppointmentControl'
 import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
+import { getDocumentLabel } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark.png'
 import './ApplicantDashboard.css'
@@ -208,7 +209,7 @@ function ApplicationDetails({ application, onAppointmentSaved, onDeletionReviewe
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-submitted-document admin-document-disclosure" key={key}><summary>{key.replace(/([A-Z])/g, ' $1')}</summary><DocumentPreview label={key} value={value} /></details>) : <p>No documents listed.</p>}</div>
+        <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-submitted-document admin-document-disclosure" key={key}><summary>{getDocumentLabel(key)}</summary><DocumentPreview label={getDocumentLabel(key)} value={value} /></details>) : <p>No documents listed.</p>}</div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )

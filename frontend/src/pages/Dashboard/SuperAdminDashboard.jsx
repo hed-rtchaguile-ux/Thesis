@@ -7,6 +7,7 @@ import SecondAppointmentControl from './SecondAppointmentControl'
 import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
+import { getDocumentLabel } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark.png'
 import './ApplicantDashboard.css'
@@ -362,7 +363,7 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{key.replace(/([A-Z])/g, ' ')}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={key} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
+        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{getDocumentLabel(key)}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={getDocumentLabel(key)} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">
         <div className="admin-document-review-heading">
           <div>

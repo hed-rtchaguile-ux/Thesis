@@ -1173,26 +1173,59 @@
 }
 
 .admin-document-disclosure > summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
   color: #2d3550;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  list-style-position: inside;
+  list-style: none;
 }
 
-.admin-document-disclosure > summary::marker {
-  color: #53689f;
+.admin-document-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-document-disclosure > summary::before {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #53689f;
+  border-bottom: 1.5px solid #53689f;
+  content: '';
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.admin-document-disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.admin-document-disclosure > summary:focus-visible {
+  outline: 2px solid #7f8dbd;
+  outline-offset: 3px;
+}
+
+.admin-document-disclosure > summary > span:first-child {
+  min-width: 0;
+  grid-column: 2;
+  overflow-wrap: anywhere;
 }
 
 .admin-document-disclosure > summary .document-review-status {
-  flex: 0 0 auto;
-  margin: 0 8px 0 auto;
+  grid-column: 3;
+  color: #697795;
   font-weight: 500;
+}
+
+.admin-document-disclosure > summary .document-review-status.accepted {
+  color: #39704b;
+}
+
+.admin-document-disclosure > summary .document-review-status.needs-redo {
+  color: #9b4a4a;
 }
 
 .admin-document-disclosure[open] > summary {
