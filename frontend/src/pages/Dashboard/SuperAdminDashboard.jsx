@@ -342,7 +342,6 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
-  const imageDocuments = documents.filter(([, value]) => typeof value === 'string' && value.startsWith('data:image/'))
 
   function requestDocumentRedo(documentKey) {
     const reviewNote = window.prompt('What does the applicant need to redo for this document?')
@@ -357,13 +356,13 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
       <div className="admin-details-group">
         <h4>Over-the-counter payment receipt</h4>
         {application.paymentReceipt
-          ? <DocumentPreview label="Payment receipt" value={application.paymentReceipt} />
+          ? <details className="admin-document-disclosure"><summary>View payment receipt</summary><DocumentPreview label="Payment receipt" value={application.paymentReceipt} /></details>
           : <p>Not uploaded</p>}
       </div>
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
+        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{key.replace(/([A-Z])/g, ' ')}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={key} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">
         <div className="admin-document-review-heading">
           <div>
@@ -375,11 +374,13 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
         <div className="admin-document-comparison">
           <div className="admin-document-preview">
             {psaDocument && typeof psaDocument[1] === 'string' && psaDocument[1].startsWith('data:image/') ? (
-              <img src={psaDocument[1]} alt="Submitted PSA marriage license" />
+              <details className="admin-document-disclosure">
+                <summary>View submitted PSA / marriage license</summary>
+                <img src={psaDocument[1]} alt="Submitted PSA marriage license" />
+              </details>
             ) : (
               <p>{psaDocument ? 'The submitted PSA is not an image preview.' : 'No PSA image was submitted.'}</p>
             )}
-            <small>Submitted PSA / marriage license</small>
           </div>
           <div className="admin-comparison-details">
             <h5>Application details</h5>
@@ -390,7 +391,6 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
             <p><strong>Applicant email:</strong> {application.applicantEmail || 'Not provided'}</p>
           </div>
         </div>
-        {imageDocuments.length > 0 && <div className="admin-other-documents"><h5>Other document images</h5>{imageDocuments.filter(([key]) => key !== 'psaMarriageLicense').map(([key, value]) => <img key={key} src={value} alt={`Submitted ${key}`} />)}</div>}
       </div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
