@@ -324,9 +324,13 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
             : detailsError ? <p className="admin-empty-state" role="alert">{detailsError}</p>
               : selectedApplicationDetails?._id === selectedApplication._id && <SuperAdminApplicationDetails
                 application={selectedApplicationDetails}
+                canApproveFirstCounseling={!isAdmin}
                 updatingDocumentKey={updatingDocumentKey}
                 onDocumentReview={updateDocumentReview}
-                onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+                onAppointmentSaved={(updatedApplication) => {
+                  setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
+                  setSelectedApplicationDetails(updatedApplication)
+                }}
                 onDeletionReviewed={(result) => {
                   if (result.deleted) {
                     setApplications((currentApplications) => currentApplications.filter((item) => item._id !== result.applicationId))
@@ -343,7 +347,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   )
 }
 
-function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed }) {
+function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed }) {
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
@@ -365,7 +369,7 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
           : <p>Not uploaded</p>}
       </div>
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
-      <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
+      <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} canApproveFirstCounseling={canApproveFirstCounseling} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{getDocumentLabel(key)}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={getDocumentLabel(key)} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">

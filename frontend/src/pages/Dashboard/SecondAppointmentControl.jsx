@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { apiFetch } from '../auth'
-import { getFirstAppointmentDate } from './applicationSearch'
+import { getFirstAppointmentDate, getAppointmentTime } from './applicationSearch'
 
 function dateKey(value) {
   const normalized = String(value || '').trim()
@@ -16,55 +16,46 @@ function dateKey(value) {
 }
 
 function todayKey() {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
 }
 
-function nextLastWednesday(firstDate, today) {
-  const firstAppointmentDay = new Date(`${firstDate}T00:00:00Z`)
-  const todayDate = new Date(`${today}T00:00:00Z`)
-  const earliestDate = new Date(Math.max(firstAppointmentDay.getTime() + 86400000, todayDate.getTime()))
-  let month = new Date(Date.UTC(earliestDate.getUTCFullYear(), earliestDate.getUTCMonth(), 1))
-
-  for (let monthOffset = 0; monthOffset < 24; monthOffset += 1) {
-    const lastWednesday = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0))
-    const daysSinceWednesday = (lastWednesday.getUTCDay() - 3 + 7) % 7
-    lastWednesday.setUTCDate(lastWednesday.getUTCDate() - daysSinceWednesday)
-
-    if (lastWednesday >= earliestDate) return lastWednesday.toISOString().slice(0, 10)
-    month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1))
-  }
-
-  return ''
-}
-
-export default function SecondAppointmentControl({ application, onSaved }) {
+export default function SecondAppointmentControl({ application, onSaved, canApproveFirstCounseling = false }) {
   const firstDate = dateKey(getFirstAppointmentDate(application))
   const today = todayKey()
   const firstAppointmentPassed = Boolean(firstDate && firstDate < today)
-  const [date, setDate] = useState(() => (
-    application.secondAppointmentDate || (firstDate ? nextLastWednesday(firstDate, today) : '')
-  ))
-  const [time, setTime] = useState(application.secondAppointmentTime || '')
+  const [time, setTime] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  async function saveAppointment(event) {
+  async function approveFirstCounseling(event) {
     event.preventDefault()
     setSaving(true)
     setError('')
     setMessage('')
     try {
-      const response = await apiFetch(`/api/applications/${application._id}/second-appointment`, {
+      const response = await apiFetch(`/api/applications/${application._id}/first-counseling/approve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, time }),
+        body: JSON.stringify({ time }),
       })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Unable to schedule the counseling appointment.')
+      if (!response.ok) throw new Error(result.message || 'Unable to approve the first counseling.')
       onSaved(result)
-      setMessage('Counseling appointment saved.')
+      const emails = [
+        result.notificationDelivery?.firstCounseling?.email,
+        result.notificationDelivery?.secondAppointment?.email,
+      ]
+      setMessage(emails.some((email) => email?.status !== 'accepted')
+        ? 'Counseling approved and scheduled, but an email could not be sent. Check the email configuration and server logs.'
+        : 'First counseling approved. The second counseling was scheduled and emailed; a reminder will be sent three days before.')
     } catch (saveError) {
       setError(saveError.message)
     } finally {
@@ -73,18 +64,24 @@ export default function SecondAppointmentControl({ application, onSaved }) {
   }
 
   return (
-    <section className="admin-second-appointment" aria-label="Second counseling appointment">
+    <section className="admin-second-appointment" aria-label="First counseling approval and second appointment">
       <div className="admin-second-appointment-heading">
-        <h4>Second appointment · Counseling</h4>
-        {application.secondAppointmentDate && <span>Scheduled: {application.secondAppointmentDate}{application.secondAppointmentTime ? ` at ${application.secondAppointmentTime}` : ''}</span>}
+        <h4>1st counseling approval · 2nd counseling</h4>
+        {application.firstCounselingApprovedAt && <span>Approved</span>}
       </div>
-      {!firstDate ? <p>Set the first appointment date before scheduling counseling.</p>
-        : !firstAppointmentPassed ? <p>Counseling can be scheduled after the first appointment date ({firstDate}) has passed.</p>
-          : <form onSubmit={saveAppointment}>
-            <label>Automatic date · Last Wednesday<input type="date" value={date} min={today} onChange={(event) => setDate(event.target.value)} required readOnly={!application.secondAppointmentDate} /></label>
-            <label>Time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
-            <button type="submit" disabled={!date || !time || saving}>{saving ? 'Saving...' : application.secondAppointmentDate ? 'Update counseling appointment' : 'Set counseling appointment'}</button>
-          </form>}
+      {!firstDate
+        ? <p>Set the first appointment date before approving the first counseling.</p>
+        : application.firstCounselingApprovedAt
+          ? <p>Second counseling: {application.secondAppointmentDate} at {application.secondAppointmentTime}. An email reminder is scheduled for three days before.</p>
+          : !firstAppointmentPassed
+            ? <p>Approval is available after the first appointment ({firstDate}{getAppointmentTime(application) ? ` at ${getAppointmentTime(application)}` : ''}) has passed.</p>
+            : canApproveFirstCounseling
+              ? <form onSubmit={approveFirstCounseling}>
+                <p className="admin-second-appointment-note">Approving confirms the first counseling and automatically schedules the second on the next last Wednesday of the month.</p>
+                <label>2nd counseling time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
+                <button type="submit" disabled={!time || saving}>{saving ? 'Approving...' : 'Approve 1st Counseling & Schedule 2nd'}</button>
+              </form>
+              : <p>Waiting for Super Admin to approve the first counseling.</p>}
       {error && <p className="admin-appointment-error" role="alert">{error}</p>}
       {message && <p className="admin-second-appointment-success" role="status">{message}</p>}
     </section>

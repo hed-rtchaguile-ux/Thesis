@@ -187,7 +187,10 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                       ? <p className="admin-empty-state" role="alert">{detailsError}</p>
                       : selectedApplicationDetails?._id === application._id && <ApplicationDetails
                     application={selectedApplicationDetails}
-                    onAppointmentSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))}
+                    onAppointmentSaved={(updatedApplication) => {
+                      setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
+                      setSelectedApplicationDetails(updatedApplication)
+                    }}
                     onDeletionReviewed={(result) => setApplications((currentApplications) => (
                       result.deleted
                         ? currentApplications.filter((item) => item._id !== result.applicationId)

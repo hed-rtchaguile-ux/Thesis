@@ -72,6 +72,16 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       )
     }
 
+    if (application.firstCounselingApprovedAt) {
+      addNotification(
+        'firstCounselingApproved',
+        'First counseling approved',
+        `Your first counseling has been approved. Your second counseling is scheduled for ${formatNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
+        false,
+        'View counseling appointment',
+      )
+    }
+
     if (application.secondAppointmentDate) {
       addNotification(
         'secondAppointment',

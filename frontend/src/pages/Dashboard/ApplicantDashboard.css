@@ -1913,6 +1913,13 @@
   opacity: 0.55;
 }
 
+.admin-second-appointment-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #697795;
+  font-size: 12px;
+}
+
 .admin-second-appointment-success {
   margin: 10px 0 0;
   color: #315d4d;

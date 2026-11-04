@@ -53,6 +53,9 @@ const applicationSchema = new mongoose.Schema({
   appointmentLocation: String,
   secondAppointmentDate: String,
   secondAppointmentTime: String,
+  firstCounselingApprovedAt: Date,
+  secondAppointmentReminderClaimedAt: Date,
+  secondAppointmentReminderSentAt: Date,
   paymentMethod: String,
   paymentAmount: String,
   paymentReceipt: String,
@@ -258,6 +261,123 @@ function formatApplicantNotificationDate(value, time = '') {
 
   const hour = Number(timeMatch[1]);
   return `${formattedDate} at ${hour % 12 || 12}:${timeMatch[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
+}
+
+function getManilaDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+}
+
+function toAppointmentDateKey(value) {
+  const normalized = String(value || '').trim();
+  let dateKey = normalized;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalized);
+    if (!slashMatch) return '';
+    const [, first, second, year] = slashMatch;
+    const month = Number(first) > 12 ? Number(second) : Number(first);
+    const day = Number(first) > 12 ? Number(first) : Number(second);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  const parsedDate = new Date(`${dateKey}T00:00:00Z`);
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === dateKey
+    ? dateKey
+    : '';
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getNextLastWednesday(firstAppointmentDate, today) {
+  const earliestDate = [
+    addDaysToDateKey(firstAppointmentDate, 1),
+    addDaysToDateKey(today, 1),
+  ].sort().at(-1);
+  let month = new Date(`${earliestDate.slice(0, 7)}-01T00:00:00Z`);
+
+  for (let monthOffset = 0; monthOffset < 24; monthOffset += 1) {
+    const lastWednesday = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0));
+    const daysSinceWednesday = (lastWednesday.getUTCDay() - 3 + 7) % 7;
+    lastWednesday.setUTCDate(lastWednesday.getUTCDate() - daysSinceWednesday);
+    if (lastWednesday.toISOString().slice(0, 10) >= earliestDate) {
+      return lastWednesday.toISOString().slice(0, 10);
+    }
+    month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
+  }
+
+  throw new Error('Unable to find the next last Wednesday for counseling.');
+}
+
+async function sendDueSecondAppointmentReminders() {
+  const today = getManilaDateKey();
+  const reminderThroughDate = addDaysToDateKey(today, 3);
+  const applications = await Application.find({
+    firstCounselingApprovedAt: { $exists: true },
+    secondAppointmentDate: { $gt: today, $lte: reminderThroughDate },
+    secondAppointmentReminderSentAt: { $exists: false },
+  }).lean();
+  const staleClaimBefore = new Date(Date.now() - 10 * 60 * 1000);
+
+  for (const application of applications) {
+    const claimTime = new Date();
+    const claim = await Application.updateOne(
+      {
+        _id: application._id,
+        secondAppointmentReminderSentAt: { $exists: false },
+        $or: [
+          { secondAppointmentReminderClaimedAt: { $exists: false } },
+          { secondAppointmentReminderClaimedAt: { $lt: staleClaimBefore } },
+        ],
+      },
+      { $set: { secondAppointmentReminderClaimedAt: claimTime } },
+    );
+    if (claim.modifiedCount !== 1) continue;
+
+    const notification = await sendApplicantNotification(
+      application,
+      'Counseling appointment reminder',
+      `This is a reminder that your second counseling appointment is scheduled for ${formatApplicantNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
+      'secondAppointmentReminder',
+    );
+    if (notification.email.status === 'accepted') {
+      await Application.updateOne(
+        { _id: application._id, secondAppointmentReminderClaimedAt: claimTime },
+        {
+          $set: { secondAppointmentReminderSentAt: new Date() },
+          $unset: { secondAppointmentReminderClaimedAt: 1 },
+        },
+      );
+    } else {
+      await Application.updateOne(
+        { _id: application._id, secondAppointmentReminderClaimedAt: claimTime },
+        { $unset: { secondAppointmentReminderClaimedAt: 1 } },
+      );
+    }
+  }
+}
+
+let counselingReminderCheck;
+async function checkCounselingReminders() {
+  if (counselingReminderCheck) return counselingReminderCheck;
+  counselingReminderCheck = sendDueSecondAppointmentReminders()
+    .catch((error) => {
+      console.error('Unable to send due counseling appointment reminders:', error.message);
+    })
+    .finally(() => {
+      counselingReminderCheck = undefined;
+    });
+  return counselingReminderCheck;
 }
 
 async function hashPassword(password) {
@@ -801,8 +921,14 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     const applicationData = req.body.applicationData && typeof req.body.applicationData === 'object' && !Array.isArray(req.body.applicationData)
       ? { ...req.body.applicationData, paymentMethod: FIXED_PAYMENT_METHOD, paymentAmount: FIXED_PAYMENT_AMOUNT }
       : req.body.applicationData;
+    const applicantFields = { ...req.body };
+    delete applicantFields.secondAppointmentDate;
+    delete applicantFields.secondAppointmentTime;
+    delete applicantFields.firstCounselingApprovedAt;
+    delete applicantFields.secondAppointmentReminderClaimedAt;
+    delete applicantFields.secondAppointmentReminderSentAt;
     const application = await Application.create({
-      ...req.body,
+      ...applicantFields,
       _id: claimedApplicationId,
       applicantEmail: req.user.email,
       status: 'For Review',
@@ -1021,7 +1147,22 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
       return res.status(404).json({ message: 'Appointment scheduling is disabled.' });
     }
 
-    const protectedFields = new Set(['_id', 'status', 'appointmentDate', 'appointmentTime', 'appointmentLocation', 'secondAppointmentDate', 'secondAppointmentTime', 'paymentReceipt', 'applicantEmail', 'createdAt', 'updatedAt']);
+    const protectedFields = new Set([
+      '_id',
+      'status',
+      'appointmentDate',
+      'appointmentTime',
+      'appointmentLocation',
+      'secondAppointmentDate',
+      'secondAppointmentTime',
+      'firstCounselingApprovedAt',
+      'secondAppointmentReminderClaimedAt',
+      'secondAppointmentReminderSentAt',
+      'paymentReceipt',
+      'applicantEmail',
+      'createdAt',
+      'updatedAt',
+    ]);
     const editableFields = Object.fromEntries(
       Object.entries(req.body).filter(([key]) => !protectedFields.has(key)),
     );
@@ -1111,7 +1252,7 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
   }
 });
 
-app.put('/api/applications/:id/second-appointment', requireRoles(['admin', 'superadmin']), async (req, res) => {
+app.put('/api/applications/:id/first-counseling/approve', requireRoles(['superadmin']), async (req, res) => {
   try {
     const application = await Application.findById(req.params.id).lean();
     if (!application) return res.status(404).json({ message: 'Application not found.' });
@@ -1119,57 +1260,104 @@ app.put('/api/applications/:id/second-appointment', requireRoles(['admin', 'supe
     const firstDateValue = application.appointmentDate && application.appointmentDate !== 'To be assigned by office'
       ? application.appointmentDate
       : application.preferredAppointmentDate;
-    const toDateKey = (value) => {
-      const normalized = String(value || '').trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
-      const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalized);
-      if (!slashMatch) return '';
-      const [, first, second, year] = slashMatch;
-      const month = Number(first) > 12 ? Number(second) : Number(first);
-      const day = Number(first) > 12 ? Number(first) : Number(second);
-      return month >= 1 && month <= 12 && day >= 1 && day <= 31
-        ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-        : '';
-    };
-    const firstDateKey = toDateKey(firstDateValue);
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const firstDateKey = toAppointmentDateKey(firstDateValue);
+    const todayKey = getManilaDateKey();
     if (!firstDateKey || firstDateKey >= todayKey) {
-      return res.status(409).json({ message: 'The counseling appointment can be scheduled after the first appointment date has passed.' });
+      return res.status(409).json({ message: 'The first counseling can be approved after the first appointment date has passed.' });
     }
 
-    const { date, time } = req.body;
-    const secondDateKey = toDateKey(date);
-    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(secondDateKey)
-      ? new Date(`${secondDateKey}T00:00:00Z`)
-      : null;
-    if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== secondDateKey || secondDateKey <= firstDateKey || secondDateKey < todayKey) {
-      return res.status(400).json({ message: 'Choose a valid counseling date after the first appointment.' });
+    const { time } = req.body;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
+      return res.status(400).json({ message: 'Choose a valid counseling appointment time.' });
     }
-    const lastDayOfMonth = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth() + 1, 0)).getUTCDate();
-    const isLastWednesday = parsedDate.getUTCDay() === 3 && parsedDate.getUTCDate() + 7 > lastDayOfMonth;
-    if (!isLastWednesday && secondDateKey !== application.secondAppointmentDate) {
-      return res.status(400).json({ message: 'The counseling appointment must be scheduled on the last Wednesday of the month.' });
+
+    if (application.firstCounselingApprovedAt) {
+      return res.status(409).json({ message: 'The first counseling has already been approved.' });
     }
+
+    const secondDateKey = getNextLastWednesday(firstDateKey, todayKey);
+    const updatedApplication = await Application.findOneAndUpdate(
+      { _id: req.params.id, firstCounselingApprovedAt: { $exists: false } },
+      {
+        $set: {
+          firstCounselingApprovedAt: new Date(),
+          secondAppointmentDate: secondDateKey,
+          secondAppointmentTime: time,
+        },
+        $unset: {
+          'notificationReads.firstCounselingApproved': 1,
+          'notificationReads.secondAppointment': 1,
+          secondAppointmentReminderClaimedAt: 1,
+          secondAppointmentReminderSentAt: 1,
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    if (!updatedApplication) return res.status(409).json({ message: 'The first counseling has already been approved.' });
+    const coupleNames = getCoupleNames(updatedApplication);
+    const firstCounselingNotification = await sendApplicantNotification(
+      updatedApplication,
+      'First counseling approved',
+      `The first counseling for ${coupleNames} has been approved. Your second counseling appointment is scheduled for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}.`,
+      'firstCounselingApproved',
+    );
+    const secondAppointmentNotification = await sendApplicantNotification(
+      updatedApplication,
+      'Second counseling appointment scheduled',
+      `Your second counseling appointment for ${coupleNames} is set for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}. We will send you an email reminder three days before the appointment.`,
+      'secondAppointment',
+    );
+    res.json({
+      ...updatedApplication,
+      notificationDelivery: {
+        firstCounseling: firstCounselingNotification,
+        secondAppointment: secondAppointmentNotification,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to approve the first counseling and schedule the second counseling.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/second-appointment', requireRoles(['superadmin']), async (req, res) => {
+  try {
+    const application = await Application.findById(req.params.id).lean();
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+    if (!application.firstCounselingApprovedAt || !application.secondAppointmentDate) {
+      return res.status(409).json({ message: 'Approve the first counseling before updating the second counseling time.' });
+    }
+
+    const date = toAppointmentDateKey(req.body.date);
+    if (date !== application.secondAppointmentDate) {
+      return res.status(400).json({ message: 'The second counseling date is automatically scheduled on the last Wednesday of the month.' });
+    }
+    const { time } = req.body;
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
       return res.status(400).json({ message: 'Choose a valid counseling appointment time.' });
     }
 
     const updatedApplication = await Application.findByIdAndUpdate(
       req.params.id,
-      { $set: { secondAppointmentDate: secondDateKey, secondAppointmentTime: time }, $unset: { 'notificationReads.secondAppointment': 1 } },
+      {
+        $set: { secondAppointmentTime: time },
+        $unset: {
+          'notificationReads.secondAppointment': 1,
+          secondAppointmentReminderClaimedAt: 1,
+          secondAppointmentReminderSentAt: 1,
+        },
+      },
       { new: true, runValidators: true },
     ).lean();
     if (!updatedApplication) return res.status(404).json({ message: 'Application not found.' });
     const notificationDelivery = await sendApplicantNotification(
       updatedApplication,
-      'Counseling appointment scheduled',
-      `Your second appointment for counseling is set for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}.`,
+      'Second counseling appointment updated',
+      `Your second counseling appointment is set for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}. We will send you an email reminder three days before the appointment.`,
       'secondAppointment',
     );
     res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
-    res.status(400).json({ message: 'Unable to schedule the counseling appointment.', error: error.message });
+    res.status(400).json({ message: 'Unable to update the second counseling time.', error: error.message });
   }
 });
 
@@ -1266,7 +1454,7 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(submitted|appointment|secondAppointment|rejected|licenseRelease|deletionRequest|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|firstCounselingApproved|secondAppointment|rejected|licenseRelease|deletionRequest|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 
@@ -1349,9 +1537,15 @@ if (require.main === module) {
     app.listen(BACKEND_PORT, () => {
       console.log(`Backend server is running on port ${BACKEND_PORT}`);
     });
-    connectToDatabase().catch(() => {
-      console.error('Please verify the Atlas cluster is running and your IP is whitelisted.');
-    });
+    const counselingReminderInterval = setInterval(() => {
+      if (mongoose.connection.readyState === 1) void checkCounselingReminders();
+    }, 15 * 60 * 1000);
+    counselingReminderInterval.unref();
+    connectToDatabase()
+      .then(() => checkCounselingReminders())
+      .catch(() => {
+        console.error('Please verify the Atlas cluster is running and your IP is whitelisted.');
+      });
   }
 }
 
