@@ -291,10 +291,10 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                     <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
                     {isAppointmentsPage && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     {!isAppointmentsPage && <>
-                      {!isAdmin && <>
+                      {!isAdmin && <div className="admin-application-actions">
                         <button className="admin-verify-button" type="button" onClick={() => confirmVerification(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Verified' ? 'Verified' : 'Verify'}</button>
                         <button className="admin-reject-button" type="button" onClick={() => confirmRejection(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Rejected' ? 'Rejected' : 'Reject'}</button>
-                      </>}
+                      </div>}
                       {application.status === 'Verified' && <LicenseReleaseControl application={application} onSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))} />}
                     </>}
                   </div>
