@@ -1458,6 +1458,30 @@
   border-top: 1px solid rgba(125, 136, 168, 0.14);
 }
 
+.admin-appointment-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.admin-appointment-actions .admin-details-button {
+  width: 112px;
+  margin-left: 0;
+  text-align: center;
+  transform: none;
+}
+
+.admin-schedule-date {
+  min-width: 180px;
+  color: #697795;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .admin-application-row > .admin-details-button,
 .admin-application-row > .admin-application-actions > .admin-verify-button,
 .admin-application-row > .admin-application-actions > .admin-reject-button {
@@ -2478,6 +2502,26 @@
 
   .admin-application-copy {
     max-width: calc(100% - 50px);
+  }
+
+  .admin-appointment-actions {
+    flex: 0 0 calc(100% - 48px);
+    justify-content: space-between;
+    gap: 10px;
+    width: calc(100% - 48px);
+    margin-left: 48px;
+  }
+
+  .admin-appointment-actions .admin-details-button {
+    flex: 0 0 112px;
+    margin-left: 0;
+  }
+
+  .admin-schedule-date {
+    min-width: 0;
+    flex: 1;
+    text-align: right;
+    white-space: normal;
   }
 
   .admin-details-button,

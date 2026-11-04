@@ -161,18 +161,24 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
               return (
                 <div key={application._id}>
-                  <div className="admin-application-row">
+                  <div className={`admin-application-row${view === 'appointments' ? ' has-appointment-schedule' : ''}`}>
                     <span className="admin-avatar">{application.groomFullName?.slice(0, 1)}{application.brideFullName?.slice(0, 1)}</span>
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
                       <small>{application.applicantEmail}</small>
                       {view !== 'appointments' && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
-                      {view === 'appointments' && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
                     </div>
-                    <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>
-                      {detailsOpen ? 'Hide details' : 'View details'}
-                    </button>
+                    {view === 'appointments'
+                      ? <div className="admin-appointment-actions">
+                        <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>
+                          {detailsOpen ? 'Hide details' : 'View details'}
+                        </button>
+                        <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>
+                      </div>
+                      : <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>
+                        {detailsOpen ? 'Hide details' : 'View details'}
+                      </button>}
                     {view !== 'appointments' && application.status === 'Verified' && <LicenseReleaseControl application={application} onSaved={(updatedApplication) => setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))} />}
                   </div>
                   {detailsOpen && (loadingDetails

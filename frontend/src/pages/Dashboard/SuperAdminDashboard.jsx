@@ -281,7 +281,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
 
               return (
                 <div key={application._id}>
-                  <div className={`admin-application-row${!isAppointmentsPage && application.status === 'Verified' ? ' has-license-release-control' : ''}`}>
+                  <div className={`admin-application-row${isAppointmentsPage ? ' has-appointment-schedule' : !isAdmin && application.status === 'Verified' ? ' has-license-release-control' : ''}`}>
                     <span className="admin-avatar">{application.groomFullName?.slice(0, 1)}{application.brideFullName?.slice(0, 1)}</span>
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
@@ -289,8 +289,12 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                       {!isAppointmentsPage && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                     </div>
-                    <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
-                    {isAppointmentsPage && <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>}
+                    {isAppointmentsPage
+                      ? <div className="admin-appointment-actions">
+                        <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>
+                        <small className="admin-schedule-date">{appointmentDate ? `${appointmentDate} · ${appointmentTime || 'Time not set'}` : 'No appointment selected'}</small>
+                      </div>
+                      : <button className="admin-details-button" type="button" onClick={() => void toggleApplicationDetails(application._id)}>{selectedApplicationId === application._id ? 'Hide details' : 'View details'}</button>}
                     {!isAppointmentsPage && <>
                       {!isAdmin && <div className="admin-application-actions">
                         <button className="admin-verify-button" type="button" onClick={() => confirmVerification(application._id)} disabled={application.status === 'Verified' || application.status === 'Rejected' || updatingId === application._id}>{updatingId === application._id ? 'Updating...' : application.status === 'Verified' ? 'Verified' : 'Verify'}</button>
