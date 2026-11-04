@@ -1544,6 +1544,13 @@
   font-size: 12px;
 }
 
+.admin-application-statuses {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .admin-application-copy .admin-workflow-status {
   align-self: flex-start;
   padding: 3px 7px;

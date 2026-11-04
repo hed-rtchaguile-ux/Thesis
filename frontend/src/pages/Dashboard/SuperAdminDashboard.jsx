@@ -286,13 +286,17 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>
                       <small>{application.applicantEmail}</small>
-                      {!isAppointmentsPage && <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>}
-                      {!isAppointmentsPage && getAppointmentDate(application) && (
-                        <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
-                          {application.firstCounselingApprovedAt
-                            ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
-                            : '1st Counseling'}
-                        </small>
+                      {!isAppointmentsPage && (
+                        <div className="admin-application-statuses">
+                          <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>
+                          {getAppointmentDate(application) && (
+                            <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
+                              {application.firstCounselingApprovedAt
+                                ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
+                                : '1st Counseling'}
+                            </small>
+                          )}
+                        </div>
                       )}
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
                     </div>
