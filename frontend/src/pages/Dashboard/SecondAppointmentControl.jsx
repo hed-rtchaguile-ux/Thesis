@@ -20,10 +20,31 @@ function todayKey() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 }
 
+function nextLastWednesday(firstDate, today) {
+  const firstAppointmentDay = new Date(`${firstDate}T00:00:00Z`)
+  const todayDate = new Date(`${today}T00:00:00Z`)
+  const earliestDate = new Date(Math.max(firstAppointmentDay.getTime() + 86400000, todayDate.getTime()))
+  let month = new Date(Date.UTC(earliestDate.getUTCFullYear(), earliestDate.getUTCMonth(), 1))
+
+  for (let monthOffset = 0; monthOffset < 24; monthOffset += 1) {
+    const lastWednesday = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0))
+    const daysSinceWednesday = (lastWednesday.getUTCDay() - 3 + 7) % 7
+    lastWednesday.setUTCDate(lastWednesday.getUTCDate() - daysSinceWednesday)
+
+    if (lastWednesday >= earliestDate) return lastWednesday.toISOString().slice(0, 10)
+    month = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1))
+  }
+
+  return ''
+}
+
 export default function SecondAppointmentControl({ application, onSaved }) {
   const firstDate = dateKey(getFirstAppointmentDate(application))
-  const firstAppointmentPassed = Boolean(firstDate && firstDate < todayKey())
-  const [date, setDate] = useState(application.secondAppointmentDate || '')
+  const today = todayKey()
+  const firstAppointmentPassed = Boolean(firstDate && firstDate < today)
+  const [date, setDate] = useState(() => (
+    application.secondAppointmentDate || (firstDate ? nextLastWednesday(firstDate, today) : '')
+  ))
   const [time, setTime] = useState(application.secondAppointmentTime || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -60,7 +81,7 @@ export default function SecondAppointmentControl({ application, onSaved }) {
       {!firstDate ? <p>Set the first appointment date before scheduling counseling.</p>
         : !firstAppointmentPassed ? <p>Counseling can be scheduled after the first appointment date ({firstDate}) has passed.</p>
           : <form onSubmit={saveAppointment}>
-            <label>Date<input type="date" value={date} min={todayKey()} onChange={(event) => setDate(event.target.value)} required /></label>
+            <label>Automatic date · Last Wednesday<input type="date" value={date} min={today} onChange={(event) => setDate(event.target.value)} required readOnly={!application.secondAppointmentDate} /></label>
             <label>Time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
             <button type="submit" disabled={!date || !time || saving}>{saving ? 'Saving...' : application.secondAppointmentDate ? 'Update counseling appointment' : 'Set counseling appointment'}</button>
           </form>}

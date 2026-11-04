@@ -1146,6 +1146,11 @@ app.put('/api/applications/:id/second-appointment', requireRoles(['admin', 'supe
     if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== secondDateKey || secondDateKey <= firstDateKey || secondDateKey < todayKey) {
       return res.status(400).json({ message: 'Choose a valid counseling date after the first appointment.' });
     }
+    const lastDayOfMonth = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth() + 1, 0)).getUTCDate();
+    const isLastWednesday = parsedDate.getUTCDay() === 3 && parsedDate.getUTCDate() + 7 > lastDayOfMonth;
+    if (!isLastWednesday && secondDateKey !== application.secondAppointmentDate) {
+      return res.status(400).json({ message: 'The counseling appointment must be scheduled on the last Wednesday of the month.' });
+    }
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
       return res.status(400).json({ message: 'Choose a valid counseling appointment time.' });
     }
