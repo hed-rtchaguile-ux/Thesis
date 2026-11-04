@@ -947,11 +947,7 @@ app.get('/api/applications/:id', requireRoles(['applicant', 'admin', 'superadmin
     const filter = req.user.role === 'applicant'
       ? { _id: req.params.id, applicantEmail: req.user.email }
       : { _id: req.params.id };
-    const applicationQuery = Application.findOne(filter);
-    if (req.user.role !== 'applicant') {
-      applicationQuery.select('-documents -paymentReceipt -applicationData');
-    }
-    const application = await applicationQuery.lean();
+    const application = await Application.findOne(filter).lean();
 
     if (!application) {
       return res.status(404).json({ message: 'Application not found.' });
@@ -961,30 +957,6 @@ app.get('/api/applications/:id', requireRoles(['applicant', 'admin', 'superadmin
     res.json(application);
   } catch (error) {
     res.status(400).json({ message: 'Unable to load application.', error: error.message });
-  }
-});
-
-app.get('/api/applications/:id/documents', requireRoles(['applicant', 'admin', 'superadmin']), async (req, res) => {
-  try {
-    const filter = req.user.role === 'applicant'
-      ? { _id: req.params.id, applicantEmail: req.user.email }
-      : { _id: req.params.id };
-    const application = await Application.findOne(filter)
-      .select('documents paymentReceipt')
-      .lean();
-
-    if (!application) {
-      return res.status(404).json({ message: 'Application not found.' });
-    }
-
-    res.set('Cache-Control', 'no-store');
-    res.json({
-      documents: application.documents || {},
-      paymentReceipt: application.paymentReceipt || '',
-    });
-  } catch (error) {
-    console.error('Unable to load application documents:', error.message);
-    res.status(400).json({ message: 'Unable to load application documents.', error: error.message });
   }
 });
 

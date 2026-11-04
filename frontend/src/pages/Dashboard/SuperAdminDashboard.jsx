@@ -8,7 +8,6 @@ import DeletionRequestReview from './DeletionRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { printExcelForm } from './printExcelForm'
-import useApplicationDocuments from './useApplicationDocuments'
 import logoImage from '../../assets/wedrings-mark.png'
 import './ApplicantDashboard.css'
 
@@ -340,8 +339,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
 }
 
 function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed }) {
-  const { documents: documentValues, paymentReceipt, isLoading: documentsLoading, error: documentsError } = useApplicationDocuments(application._id)
-  const documents = Object.entries(documentValues)
+  const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
   const imageDocuments = documents.filter(([, value]) => typeof value === 'string' && value.startsWith('data:image/'))
@@ -358,15 +356,14 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p></div>
       <div className="admin-details-group">
         <h4>Over-the-counter payment receipt</h4>
-        {documentsLoading ? <p>Loading payment receipt...</p>
-          : documentsError ? <p className="admin-appointment-error" role="alert">{documentsError}</p>
-            : paymentReceipt ? <DocumentPreview label="Payment receipt" value={paymentReceipt} />
-              : <p>Not uploaded</p>}
+        {application.paymentReceipt
+          ? <DocumentPreview label="Payment receipt" value={application.paymentReceipt} />
+          : <p>Not uploaded</p>}
       </div>
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documentsLoading ? <p>Loading submitted documents...</p> : documentsError ? <p className="admin-appointment-error" role="alert">{documentsError}</p> : documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
+        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <div className="admin-document-review-row" key={key}><h5>{key.replace(/([A-Z])/g, ' $1')}</h5><DocumentPreview label={key} value={value} /><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span><div><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></div>) : <p>No documents listed.</p>}</div>
       <div className="admin-document-review">
         <div className="admin-document-review-heading">
           <div>
@@ -377,10 +374,10 @@ function SuperAdminApplicationDetails({ application, updatingDocumentKey, onDocu
         </div>
         <div className="admin-document-comparison">
           <div className="admin-document-preview">
-            {documentsLoading ? <p>Loading PSA preview...</p> : psaDocument && typeof psaDocument[1] === 'string' && psaDocument[1].startsWith('data:image/') ? (
+            {psaDocument && typeof psaDocument[1] === 'string' && psaDocument[1].startsWith('data:image/') ? (
               <img src={psaDocument[1]} alt="Submitted PSA marriage license" />
             ) : (
-              <p>{documentsError ? 'Unable to load the PSA preview.' : psaDocument ? 'The submitted PSA is not an image preview.' : 'No PSA image was submitted.'}</p>
+              <p>{psaDocument ? 'The submitted PSA is not an image preview.' : 'No PSA image was submitted.'}</p>
             )}
             <small>Submitted PSA / marriage license</small>
           </div>
