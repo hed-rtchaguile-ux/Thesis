@@ -1394,8 +1394,7 @@
 .admin-application-row > .admin-details-button,
 .admin-application-row > .admin-application-actions > .admin-verify-button,
 .admin-application-row > .admin-application-actions > .admin-reject-button {
-  position: relative;
-  top: 30%;
+  transform: translateY(30%);
 }
 
 .admin-avatar {
