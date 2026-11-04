@@ -1569,6 +1569,24 @@
   background: #faeaea;
 }
 
+.admin-application-copy .admin-counseling-status {
+  align-self: flex-start;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.admin-application-copy .admin-counseling-status.first-counseling {
+  color: #77592d;
+  background: #f8f0df;
+}
+
+.admin-application-copy .admin-counseling-status.second-counseling {
+  color: #3e557e;
+  background: #e9eef8;
+}
+
 .admin-verify-button {
   border-color: #aebadb;
   color: #53689f;
