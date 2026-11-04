@@ -161,7 +161,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
               return (
                 <div key={application._id}>
-                  <div className={`admin-application-row${view === 'appointments' ? ' has-appointment-schedule' : ''}`}>
+                  <div className={`admin-application-row${view === 'appointments' ? ' has-appointment-schedule' : ' has-application-actions'}`}>
                     <span className="admin-avatar">{application.groomFullName?.slice(0, 1)}{application.brideFullName?.slice(0, 1)}</span>
                     <div className="admin-application-copy">
                       <strong>{application.groomFullName} &amp; {application.brideFullName}</strong>

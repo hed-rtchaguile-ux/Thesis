@@ -1458,6 +1458,24 @@
   border-top: 1px solid rgba(125, 136, 168, 0.14);
 }
 
+.admin-application-row.has-application-actions {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 112px 388px;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-application-row.has-application-actions > .admin-details-button {
+  width: 112px;
+  margin-left: 0;
+  text-align: center;
+}
+
+.admin-application-row.has-application-actions > .license-release-control {
+  width: 100%;
+  min-width: 0;
+}
+
 .admin-appointment-actions {
   display: flex;
   flex: 0 0 auto;
@@ -1572,7 +1590,8 @@
 }
 
 @media (max-width: 1200px) {
-  .admin-application-row.has-license-release-control {
+  .admin-application-row.has-license-release-control,
+  .admin-application-row.has-application-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;
@@ -1583,18 +1602,21 @@
     box-sizing: border-box;
   }
 
-  .admin-application-row.has-license-release-control > .admin-avatar {
+  .admin-application-row.has-license-release-control > .admin-avatar,
+  .admin-application-row.has-application-actions > .admin-avatar {
     grid-column: 1;
   }
 
-  .admin-application-row.has-license-release-control > .admin-application-copy {
+  .admin-application-row.has-license-release-control > .admin-application-copy,
+  .admin-application-row.has-application-actions > .admin-application-copy {
     grid-column: 2 / -1;
     max-width: none;
   }
 
   .admin-application-row.has-license-release-control > .admin-details-button,
   .admin-application-row.has-license-release-control .admin-application-actions > .admin-verify-button,
-  .admin-application-row.has-license-release-control .admin-application-actions > .admin-reject-button {
+  .admin-application-row.has-license-release-control .admin-application-actions > .admin-reject-button,
+  .admin-application-row.has-application-actions > .admin-details-button {
     width: 100%;
     min-width: 0;
     margin: 0;
@@ -1606,7 +1628,8 @@
     display: contents;
   }
 
-  .admin-application-row.has-license-release-control > .license-release-control {
+  .admin-application-row.has-license-release-control > .license-release-control,
+  .admin-application-row.has-application-actions > .license-release-control {
     grid-column: 1 / -1;
     grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
@@ -1616,7 +1639,9 @@
   }
 
   .admin-application-row.has-license-release-control .license-release-control label,
-  .admin-application-row.has-license-release-control .license-release-control input {
+  .admin-application-row.has-license-release-control .license-release-control input,
+  .admin-application-row.has-application-actions .license-release-control label,
+  .admin-application-row.has-application-actions .license-release-control input {
     min-width: 0;
     width: 100%;
     box-sizing: border-box;
@@ -1624,16 +1649,19 @@
 }
 
 @media (max-width: 520px) {
-  .admin-application-row.has-license-release-control > .license-release-control {
+  .admin-application-row.has-license-release-control > .license-release-control,
+  .admin-application-row.has-application-actions > .license-release-control {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
 
-  .admin-application-row.has-license-release-control .license-release-control .admin-verify-button {
+  .admin-application-row.has-license-release-control .license-release-control .admin-verify-button,
+  .admin-application-row.has-application-actions .license-release-control .admin-verify-button {
     width: 100%;
   }
 
-  .admin-application-row.has-license-release-control {
+  .admin-application-row.has-license-release-control,
+  .admin-application-row.has-application-actions {
     padding-bottom: 20px;
   }
 }
