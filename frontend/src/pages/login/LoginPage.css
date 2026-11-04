@@ -123,6 +123,7 @@
   background: rgba(255, 255, 255, 0.55);
   border: 1px solid rgba(130, 127, 123, 0.18);
   box-shadow: 0 10px 26px rgba(75, 70, 65, 0.05);
+  transform: translateY(-24px);
 }
 
 .panel-inner h2 {
@@ -318,9 +319,23 @@
     min-height: 100vh;
   }
 
-  .login-intro {
-    min-height: 340px;
-    padding: 26px 24px 18px;
+  .login-page-shell .login-intro {
+    min-height: 120px;
+    padding: 18px 24px;
+  }
+
+  .login-page-shell .login-intro::after {
+    inset: auto;
+    top: -110px;
+    left: 18%;
+    width: 260px;
+    height: 260px;
+    border: 1px solid rgba(120, 118, 113, 0.24);
+    border-radius: 50%;
+    background: transparent;
+    box-shadow:
+      0 0 0 26px rgba(120, 118, 113, 0.08),
+      0 0 0 52px rgba(120, 118, 113, 0.06);
   }
 
   .intro-content {
@@ -341,11 +356,13 @@
     height: 60px;
   }
 
-  .login-panel {
-    padding: 24px 18px 32px;
+  .login-page-shell .login-panel {
+    min-height: calc(100svh - 120px);
+    padding: 24px 18px;
   }
 
-  .panel-inner {
+  .login-page-shell .panel-inner {
     padding: 20px 18px;
+    transform: none;
   }
 }
