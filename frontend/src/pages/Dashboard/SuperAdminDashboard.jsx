@@ -5,6 +5,7 @@ import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
 import DeletionRequestReview from './DeletionRequestReview'
+import EditRequestReview from './EditRequestReview'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { getDocumentLabel } from './documentLabels'
@@ -302,6 +303,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                         </div>
                       )}
                       {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
+                      {application.editRequestStatus === 'Pending' && <small className="edit-request-badge">Edit requested</small>}
                     </div>
                     {isAppointmentsPage
                       ? <div className="admin-appointment-actions">
@@ -353,6 +355,10 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                     setApplications((currentApplications) => currentApplications.map((item) => item._id === result.application._id ? result.application : item))
                   }
                 }}
+                onEditRequestReviewed={(updatedApplication) => {
+                  setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
+                  setSelectedApplicationDetails(updatedApplication)
+                }}
               />}
           </section>
         </div>
@@ -361,7 +367,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   )
 }
 
-function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed }) {
+function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed, onEditRequestReviewed }) {
   const documents = Object.entries(application.documents || {})
   const documentReviews = application.documentReviews || {}
   const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
@@ -383,6 +389,7 @@ function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, 
           : <p>Not uploaded</p>}
       </div>
       <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
+      <EditRequestReview application={application} onReviewed={onEditRequestReviewed} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} canApproveFirstCounseling={canApproveFirstCounseling} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{getDocumentLabel(key)}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={getDocumentLabel(key)} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>

@@ -66,6 +66,10 @@ const applicationSchema = new mongoose.Schema({
   notificationReads: { type: Map, of: Date },
   deletionRequestStatus: { type: String, enum: ['Pending', 'Rejected'] },
   deletionRequestedAt: Date,
+  editRequestStatus: { type: String, enum: ['Pending', 'Approved', 'Rejected', 'Completed'] },
+  editRequestComment: String,
+  editRequestedAt: Date,
+  editRequestReviewedAt: Date,
   status: { type: String, default: 'For Review' },
   licenseReleaseDate: String,
 }, { timestamps: true });
@@ -961,6 +965,7 @@ app.post('/api/applications/:id/deletion-request', requireRoles(['applicant']), 
         _id: req.params.id,
         applicantEmail: req.user.email,
         deletionRequestStatus: { $ne: 'Pending' },
+        editRequestStatus: { $ne: 'Approved' },
       },
       {
         $set: {
@@ -978,6 +983,9 @@ app.post('/api/applications/:id/deletion-request', requireRoles(['applicant']), 
         applicantEmail: req.user.email,
       }).lean();
       if (!existingApplication) return res.status(404).json({ message: 'Application not found.' });
+      if (existingApplication.editRequestStatus === 'Approved') {
+        return res.status(409).json({ message: 'Complete your approved application edits before requesting deletion.' });
+      }
       return res.status(409).json({ message: 'A deletion request is already awaiting review.' });
     }
 
@@ -990,6 +998,118 @@ app.post('/api/applications/:id/deletion-request', requireRoles(['applicant']), 
     res.json({ ...application, notificationDelivery });
   } catch (error) {
     res.status(400).json({ message: 'Unable to request application deletion.', error: error.message });
+  }
+});
+
+app.post('/api/applications/:id/edit-request', requireRoles(['applicant']), async (req, res) => {
+  try {
+    const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : '';
+    if (!comment) return res.status(400).json({ message: 'Explain what you need to edit before submitting the request.' });
+    if (comment.length > 1000) return res.status(400).json({ message: 'The edit request comment must be 1,000 characters or fewer.' });
+
+    const application = await Application.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+        editRequestStatus: { $nin: ['Pending', 'Approved'] },
+        deletionRequestStatus: { $ne: 'Pending' },
+      },
+      {
+        $set: {
+          editRequestStatus: 'Pending',
+          editRequestComment: comment,
+          editRequestedAt: new Date(),
+        },
+        $unset: { 'notificationReads.editRequest': 1 },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) {
+      const existingApplication = await Application.findOne({
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+      }).lean();
+      if (!existingApplication) return res.status(404).json({ message: 'Application not found.' });
+      if (existingApplication.deletionRequestStatus === 'Pending') {
+        return res.status(409).json({ message: 'Editing is unavailable while a deletion request is pending.' });
+      }
+      if (existingApplication.editRequestStatus === 'Approved') {
+        return res.status(409).json({ message: 'An edit request is already approved. Complete those changes before requesting again.' });
+      }
+      return res.status(409).json({ message: 'An edit request is already awaiting review.' });
+    }
+
+    res.json(application);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to submit the edit request.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/edit-request/review', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const action = String(req.body.action || '');
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ message: 'Choose whether to approve or reject the edit request.' });
+    }
+
+    const editRequestStatus = action === 'approve' ? 'Approved' : 'Rejected';
+    const application = await Application.findOneAndUpdate(
+      { _id: req.params.id, editRequestStatus: 'Pending' },
+      {
+        $set: {
+          editRequestStatus,
+          editRequestReviewedAt: new Date(),
+        },
+        $unset: { 'notificationReads.editRequest': 1 },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    if (!application) return res.status(404).json({ message: 'Pending edit request not found.' });
+
+    const notificationDelivery = await sendApplicantNotification(
+      application,
+      action === 'approve' ? 'Edit request approved' : 'Edit request not approved',
+      action === 'approve'
+        ? 'Your request to edit your application was approved. Open your application details to make and save the changes.'
+        : 'Your request to edit your application was not approved. Contact the office if you have questions.',
+      action === 'approve' ? 'editRequestApproved' : 'editRequestRejected',
+    );
+    res.json({ application, notificationDelivery });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to review the edit request.', error: error.message });
+  }
+});
+
+app.put('/api/applications/:id/edit-request/complete', requireRoles(['applicant']), async (req, res) => {
+  try {
+    const application = await Application.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+        editRequestStatus: 'Approved',
+      },
+      {
+        $set: {
+          editRequestStatus: 'Completed',
+          editRequestReviewedAt: new Date(),
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) {
+      const existingApplication = await Application.findOne({
+        _id: req.params.id,
+        applicantEmail: req.user.email,
+      }).select('_id').lean();
+      if (!existingApplication) return res.status(404).json({ message: 'Application not found.' });
+      return res.status(409).json({ message: 'There is no approved edit request to complete.' });
+    }
+
+    res.json(application);
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to finish application edits.', error: error.message });
   }
 });
 
@@ -1160,6 +1280,12 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
       'secondAppointmentReminderSentAt',
       'paymentReceipt',
       'applicantEmail',
+      'editRequestStatus',
+      'editRequestComment',
+      'editRequestedAt',
+      'editRequestReviewedAt',
+      'deletionRequestStatus',
+      'deletionRequestedAt',
       'createdAt',
       'updatedAt',
     ]);
@@ -1182,6 +1308,12 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
     if (!existingApplication) {
       return res.status(404).json({ message: 'Application not found.' });
     }
+    if (existingApplication.editRequestStatus !== 'Approved') {
+      return res.status(403).json({ message: 'An admin must approve an edit request before you can update this application.' });
+    }
+    if (existingApplication.deletionRequestStatus === 'Pending') {
+      return res.status(409).json({ message: 'Editing is unavailable while a deletion request is pending.' });
+    }
 
     const replacedFlaggedDocuments = Object.keys(editableFields.documents || {}).filter((documentKey) => (
       existingApplication.documents?.[documentKey] !== editableFields.documents[documentKey]
@@ -1201,10 +1333,18 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
     }
 
     const application = await Application.findOneAndUpdate(
-      ownerFilter,
+      {
+        ...ownerFilter,
+        editRequestStatus: 'Approved',
+        deletionRequestStatus: { $ne: 'Pending' },
+      },
       update,
       { new: true, runValidators: true },
     ).lean();
+
+    if (!application) {
+      return res.status(409).json({ message: 'The edit approval is no longer available. Ask the office to approve a new edit request.' });
+    }
 
     res.set('Cache-Control', 'no-store');
     res.json(application);
@@ -1454,7 +1594,7 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(submitted|appointment|firstCounselingApproved|secondAppointment|rejected|licenseRelease|deletionRequest|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|firstCounselingApproved|secondAppointment|rejected|licenseRelease|deletionRequest|editRequest|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

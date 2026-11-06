@@ -62,6 +62,21 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       )
     }
 
+    if (['Pending', 'Approved', 'Rejected'].includes(application.editRequestStatus)) {
+      const requestMessages = {
+        Pending: 'Your request to edit this application is awaiting admin approval.',
+        Approved: 'Your edit request was approved. You can now update your application.',
+        Rejected: 'Your request to edit this application was not approved.',
+      }
+      addNotification(
+        'editRequest',
+        application.editRequestStatus === 'Pending' ? 'Edit request submitted' : `Edit request ${application.editRequestStatus.toLowerCase()}`,
+        requestMessages[application.editRequestStatus],
+        false,
+        'View application',
+      )
+    }
+
     if (application.appointmentDate && application.appointmentDate !== 'To be assigned by office') {
       addNotification(
         'appointment',

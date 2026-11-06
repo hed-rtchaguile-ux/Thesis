@@ -783,6 +783,11 @@
   font-weight: 700;
 }
 
+.edit-request-badge {
+  color: #53689f !important;
+  font-weight: 700;
+}
+
 .deletion-request-review-actions {
   margin-top: 10px;
 }
@@ -1086,6 +1091,45 @@
   text-transform: none;
 }
 
+.applicant-edit-request {
+  margin-bottom: 16px;
+}
+
+.applicant-edit-request h3 {
+  margin: 0 0 10px;
+  color: #53689f;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.applicant-edit-request form {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.edit-request-comment {
+  display: grid;
+  width: min(100%, 560px);
+  gap: 6px;
+  color: #53689f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.edit-request-comment textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid rgba(125, 136, 168, 0.24);
+  border-radius: 6px;
+  color: #2d3550;
+  background: #ffffff;
+  font: inherit;
+  font-weight: 400;
+}
+
 .applicant-modal-actions {
   justify-content: flex-end;
   margin-top: 20px;
@@ -1101,6 +1145,48 @@
   border: 1px solid rgba(125, 136, 168, 0.14);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
+}
+
+.applicant-detail-disclosure {
+  grid-column: 1 / -1;
+}
+
+.applicant-detail-disclosure > summary,
+.applicant-document-review > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.applicant-detail-disclosure > summary::-webkit-details-marker,
+.applicant-document-review > summary::-webkit-details-marker {
+  display: none;
+}
+
+.applicant-detail-disclosure > summary::after,
+.applicant-document-review > summary::after {
+  content: '+';
+  color: #53689f;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.applicant-detail-disclosure[open] > summary::after,
+.applicant-document-review[open] > summary::after {
+  content: '−';
+}
+
+.applicant-detail-disclosure > summary h3,
+.applicant-document-review > summary h3 {
+  margin: 0 0 10px;
+}
+
+.applicant-detail-disclosure[open] > summary,
+.applicant-document-review[open] > summary {
+  margin-bottom: 12px;
 }
 
 .applicant-detail-heading {
@@ -1142,6 +1228,17 @@
 
 .applicant-document-review {
   grid-column: 1 / -1;
+  padding: 16px;
+  border: 1px solid rgba(125, 136, 168, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.edit-request-status {
+  flex: 1 0 100%;
+  color: #53689f;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .applicant-document-review p {

@@ -26,6 +26,9 @@ export default function ApplicantDashboard() {
   const [editDocuments, setEditDocuments] = useState({})
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editRequestComment, setEditRequestComment] = useState('')
+  const [isRequestingEdit, setIsRequestingEdit] = useState(false)
+  const [isFinishingEdit, setIsFinishingEdit] = useState(false)
   const [receiptUploads, setReceiptUploads] = useState({})
   const [receiptErrors, setReceiptErrors] = useState({})
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState({})
@@ -45,6 +48,9 @@ export default function ApplicantDashboard() {
       const fetchedApplications = await response.json()
       const latestApplication = fetchedApplications[0]
       setApplications(fetchedApplications)
+      setSelectedApplication((current) => current
+        ? fetchedApplications.find((item) => item._id === current._id) || current
+        : current)
       setApplicationsStatus('ready')
       setApplication({
         status: latestApplication?.status || 'No applications',
@@ -142,11 +148,59 @@ export default function ApplicantDashboard() {
 
   const openApplication = useCallback((applicationRecord, editing = false) => {
     setSelectedApplication(applicationRecord)
-    setEditingSection(editing ? 'groom' : '')
+    setEditingSection(editing && applicationRecord.editRequestStatus === 'Approved' ? 'groom' : '')
     setEditError('')
+    setEditRequestComment('')
     setEditForm(getEditableApplicationData(applicationRecord))
     setEditDocuments(applicationRecord.documents || {})
   }, [getEditableApplicationData])
+
+  async function requestApplicationEdit(event) {
+    event.preventDefault()
+    const comment = editRequestComment.trim()
+    if (!comment) {
+      setEditError('Describe what you need to edit.')
+      return
+    }
+
+    setIsRequestingEdit(true)
+    setEditError('')
+    try {
+      const response = await apiFetch(`/api/applications/${selectedApplication._id}/edit-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Unable to submit the edit request.')
+      setApplications((current) => current.map((item) => item._id === result._id ? result : item))
+      setSelectedApplication(result)
+      setEditRequestComment('')
+    } catch (error) {
+      setEditError(error.message || 'Unable to submit the edit request.')
+    } finally {
+      setIsRequestingEdit(false)
+    }
+  }
+
+  async function finishApplicationEdit() {
+    setIsFinishingEdit(true)
+    setEditError('')
+    try {
+      const response = await apiFetch(`/api/applications/${selectedApplication._id}/edit-request/complete`, {
+        method: 'PUT',
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Unable to finish application edits.')
+      setApplications((current) => current.map((item) => item._id === result._id ? result : item))
+      setSelectedApplication(result)
+      setEditingSection('')
+    } catch (error) {
+      setEditError(error.message || 'Unable to finish application edits.')
+    } finally {
+      setIsFinishingEdit(false)
+    }
+  }
 
   async function uploadPaymentReceipt(applicationRecord, event) {
     const input = event.target
@@ -396,6 +450,35 @@ export default function ApplicantDashboard() {
     && field !== 'paymentMethod'
     && field !== 'paymentAmount'
   ))
+  const canEditApplication = selectedApplication?.editRequestStatus === 'Approved'
+    && selectedApplication.deletionRequestStatus !== 'Pending'
+
+  function getPersonAge(person) {
+    const savedAge = Number(selectedApplication.applicationData?.[`${person}Age`])
+    if (Number.isFinite(savedAge) && savedAge > 0) return savedAge
+    const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(editForm[`${person}Dob`] || ''))
+    if (!match) return null
+    const [, monthText, dayText, yearText] = match
+    const birthDate = new Date(Number(yearText), Number(monthText) - 1, Number(dayText))
+    if (Number.isNaN(birthDate.getTime()) || birthDate > new Date()) return null
+    const today = new Date()
+    return today.getFullYear() - birthDate.getFullYear()
+      - (today.getMonth() < birthDate.getMonth()
+        || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate()) ? 1 : 0)
+  }
+
+  function getVisibleEditFields(fields) {
+    return fields.filter((field) => {
+      const value = editForm[field]
+      if (value === undefined || value === null || String(value).trim() === '' || String(value).trim().toLowerCase() === 'not provided') return false
+      const personMatch = /^(groom|bride)/.exec(field)
+      if (!personMatch) return true
+      const person = personMatch[1]
+      if (/Dissolution/.test(field) && editForm[`${person}PreviouslyMarried`] !== 'Yes') return false
+      if (/Advisor|Consent|Advice/i.test(field) && getPersonAge(person) >= 28) return false
+      return true
+    })
+  }
 
   return (
     <section className="applicant-main">
@@ -600,7 +683,18 @@ export default function ApplicantDashboard() {
                       <div className="application-actions">
                         <button type="button" className="application-view-button" onClick={() => openApplication(item)}>View submission</button>
                         <button type="button" className="application-view-button" onClick={() => printExcelForm(item._id)}>Print form</button>
-                        <button type="button" className="application-edit-button" onClick={() => openApplication(item, true)}>Edit information</button>
+                        <button type="button" className="application-edit-button" onClick={() => openApplication(item)}>Request edit</button>
+                        {item.editRequestStatus && (
+                          <span className="edit-request-status">
+                            {item.editRequestStatus === 'Pending'
+                              ? 'Edit request pending'
+                              : item.editRequestStatus === 'Approved'
+                                ? 'Editing approved'
+                                : item.editRequestStatus === 'Rejected'
+                                  ? 'Edit request not approved'
+                                  : 'Previous edit completed'}
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="application-deletion-request-button"
@@ -651,44 +745,87 @@ export default function ApplicantDashboard() {
                 <button type="button" className="applicant-modal-close" onClick={() => setSelectedApplication(null)} aria-label="Close application">x</button>
               </div>
 
+              <section className="applicant-detail-card applicant-edit-request">
+                <h3>Request to edit application</h3>
+                {canEditApplication ? (
+                  <>
+                    <p>Your request was approved. You can edit and save information in multiple sections. Finish editing when you are done.</p>
+                    {!editingSection && (
+                      <button type="button" className="application-edit-button" onClick={() => void finishApplicationEdit()} disabled={isFinishingEdit}>
+                        {isFinishingEdit ? 'Finishing...' : 'Finish editing'}
+                      </button>
+                    )}
+                  </>
+                ) : selectedApplication.editRequestStatus === 'Pending' ? (
+                  <>
+                    <p>Your edit request is awaiting admin review.</p>
+                    <p><strong>Requested change:</strong> {selectedApplication.editRequestComment}</p>
+                  </>
+                ) : selectedApplication.deletionRequestStatus === 'Pending' ? (
+                  <p>Editing is unavailable while a deletion request is pending.</p>
+                ) : (
+                  <form onSubmit={requestApplicationEdit}>
+                    {selectedApplication.editRequestStatus === 'Rejected' && (
+                      <p>Your previous edit request was not approved. You may submit a new request.</p>
+                    )}
+                    <label className="edit-request-comment">
+                      What would you like to edit?
+                      <textarea
+                        rows="3"
+                        maxLength="1000"
+                        value={editRequestComment}
+                        onChange={(event) => setEditRequestComment(event.target.value)}
+                        placeholder="Describe the information you need to change."
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="application-edit-button" disabled={isRequestingEdit}>
+                      {isRequestingEdit ? 'Sending request...' : 'Submit edit request'}
+                    </button>
+                  </form>
+                )}
+                {editError && <p className="application-edit-error" role="alert">{editError}</p>}
+              </section>
+
               <div className="applicant-submission-details">
-                <section className="applicant-detail-card">
-                  <div className="applicant-detail-heading">
-                    <h3>Groom information</h3>
-                    {editingSection !== 'groom' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('groom'); setEditError('') }}>Edit information</button>}
-                  </div>
+                <details className="applicant-detail-card applicant-detail-disclosure">
+                  <summary><h3>Groom information</h3></summary>
                   {editingSection === 'groom' ? (
                     <form onSubmit={saveApplicationEdit}>
                       {renderEditFields(groomEditFields)}
                       <div className="applicant-modal-actions">{renderSectionActions()}</div>
                       {editError && <p className="application-edit-error">{editError}</p>}
                     </form>
-                  ) : groomEditFields.map((field) => (
+                  ) : (
+                    <>
+                      {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('groom'); setEditError('') }}>Edit groom information</button>}
+                      {getVisibleEditFields(groomEditFields).map((field) => (
                     <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
-                  ))}
-                </section>
+                      ))}
+                    </>
+                  )}
+                </details>
 
-                <section className="applicant-detail-card">
-                  <div className="applicant-detail-heading">
-                    <h3>Bride information</h3>
-                    {editingSection !== 'bride' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('bride'); setEditError('') }}>Edit information</button>}
-                  </div>
+                <details className="applicant-detail-card applicant-detail-disclosure">
+                  <summary><h3>Bride information</h3></summary>
                   {editingSection === 'bride' ? (
                     <form onSubmit={saveApplicationEdit}>
                       {renderEditFields(brideEditFields)}
                       <div className="applicant-modal-actions">{renderSectionActions()}</div>
                       {editError && <p className="application-edit-error">{editError}</p>}
                     </form>
-                  ) : brideEditFields.map((field) => (
+                  ) : (
+                    <>
+                      {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('bride'); setEditError('') }}>Edit bride information</button>}
+                      {getVisibleEditFields(brideEditFields).map((field) => (
                     <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
-                  ))}
-                </section>
+                      ))}
+                    </>
+                  )}
+                </details>
 
-                <section className="applicant-detail-card">
-                  <div className="applicant-detail-heading">
-                    <h3>Appointment</h3>
-                    {editingSection !== 'appointment' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('appointment'); setEditError('') }}>Edit information</button>}
-                  </div>
+                <details className="applicant-detail-card applicant-detail-disclosure">
+                  <summary><h3>Appointment</h3></summary>
                   {editingSection === 'appointment' ? (
                     <form onSubmit={saveApplicationEdit}>
                       {renderEditFields(appointmentEditFields)}
@@ -697,44 +834,44 @@ export default function ApplicantDashboard() {
                     </form>
                   ) : (
                     <>
-                      <p><strong>Preferred date:</strong> {formatNotificationDate(selectedApplication.preferredAppointmentDate)}</p>
-                      <p><strong>Preferred time:</strong> {selectedApplication.preferredAppointmentTime || 'Not provided'}</p>
-                      <p><strong>Scheduled date:</strong> {formatNotificationDate(selectedApplication.appointmentDate)}</p>
-                      <p><strong>Scheduled time:</strong> {selectedApplication.appointmentTime || 'To be assigned by office'}</p>
-                      <p><strong>Location:</strong> {selectedApplication.appointmentLocation || 'Not provided'}</p>
+                      {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('appointment'); setEditError('') }}>Edit appointment information</button>}
+                      {selectedApplication.preferredAppointmentDate && <p><strong>Preferred date:</strong> {formatNotificationDate(selectedApplication.preferredAppointmentDate)}</p>}
+                      {selectedApplication.preferredAppointmentTime && <p><strong>Preferred time:</strong> {selectedApplication.preferredAppointmentTime}</p>}
+                      {selectedApplication.appointmentDate && <p><strong>Scheduled date:</strong> {formatNotificationDate(selectedApplication.appointmentDate)}</p>}
+                      {selectedApplication.appointmentTime && <p><strong>Scheduled time:</strong> {selectedApplication.appointmentTime}</p>}
+                      {selectedApplication.appointmentLocation && <p><strong>Location:</strong> {selectedApplication.appointmentLocation}</p>}
                       <p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p>
-                      <p><strong>Counseling appointment:</strong> {selectedApplication.secondAppointmentDate ? formatNotificationDate(selectedApplication.secondAppointmentDate, selectedApplication.secondAppointmentTime) : 'Not scheduled'}</p>
-                      <p><strong>Marriage license release:</strong> {selectedApplication.licenseReleaseDate ? formatNotificationDate(selectedApplication.licenseReleaseDate) : 'Not announced'}</p>
+                      {selectedApplication.secondAppointmentDate && <p><strong>Counseling appointment:</strong> {formatNotificationDate(selectedApplication.secondAppointmentDate, selectedApplication.secondAppointmentTime)}</p>}
+                      {selectedApplication.licenseReleaseDate && <p><strong>Marriage license release:</strong> {formatNotificationDate(selectedApplication.licenseReleaseDate)}</p>}
                     </>
                   )}
-                </section>
+                </details>
 
-                {(otherEditFields.length > 0 || selectedApplication) && (
-                  <section className="applicant-detail-card">
-                    <div className="applicant-detail-heading">
-                      <h3>Other submitted information</h3>
-                      {otherEditFields.length > 0 && editingSection !== 'other' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('other'); setEditError('') }}>Edit information</button>}
-                    </div>
+                {otherEditFields.length > 0 && (
+                  <details className="applicant-detail-card applicant-detail-disclosure">
+                    <summary><h3>Other submitted information</h3></summary>
                     {editingSection === 'other' ? (
                       <form onSubmit={saveApplicationEdit}>
                         {renderEditFields(otherEditFields)}
                         <div className="applicant-modal-actions">{renderSectionActions()}</div>
                         {editError && <p className="application-edit-error">{editError}</p>}
                       </form>
-                    ) : otherEditFields.map((field) => (
-                      <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
-                    ))}
-                    <p><strong>Payment Method:</strong> {FIXED_PAYMENT_METHOD}</p>
-                    <p><strong>Payment Amount:</strong> {FIXED_PAYMENT_AMOUNT}</p>
-                  </section>
+                    ) : (
+                      <>
+                        {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('other'); setEditError('') }}>Edit other information</button>}
+                        {getVisibleEditFields(otherEditFields).map((field) => (
+                          <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field]}</p>
+                        ))}
+                        <p><strong>Payment Method:</strong> {FIXED_PAYMENT_METHOD}</p>
+                        <p><strong>Payment Amount:</strong> {FIXED_PAYMENT_AMOUNT}</p>
+                      </>
+                    )}
+                  </details>
                 )}
 
                 {Object.keys(editDocuments).length > 0 && (
-                  <section className="applicant-detail-card applicant-edit-documents">
-                    <div className="applicant-detail-heading">
-                      <h3>Submitted documents</h3>
-                      {editingSection !== 'documents' && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('documents'); setEditError('') }}>Edit information</button>}
-                    </div>
+                  <details className="applicant-detail-card applicant-edit-documents applicant-detail-disclosure">
+                    <summary><h3>Submitted documents</h3></summary>
                     {editingSection === 'documents' ? (
                       <form onSubmit={saveApplicationEdit}>
                         {Object.entries(editDocuments).map(([key, value]) => (
@@ -743,14 +880,19 @@ export default function ApplicantDashboard() {
                         <div className="applicant-modal-actions">{renderSectionActions()}</div>
                         {editError && <p className="application-edit-error">{editError}</p>}
                       </form>
-                    ) : Object.entries(editDocuments).map(([key]) => (
-                      <p key={key}><strong>{formatEditFieldLabel(key)}:</strong> {selectedApplication.documents?.[key] ? 'Document saved' : 'Not provided'}</p>
-                    ))}
-                  </section>
+                    ) : (
+                      <>
+                        {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('documents'); setEditError('') }}>Edit documents</button>}
+                        {Object.entries(editDocuments).filter(([key]) => selectedApplication.documents?.[key]).map(([key]) => (
+                          <p key={key}><strong>{formatEditFieldLabel(key)}:</strong> Document saved</p>
+                        ))}
+                      </>
+                    )}
+                  </details>
                 )}
 
-                <div className="applicant-document-review">
-                  <h3>Document review</h3>
+                {Object.keys(selectedApplication.documents || {}).length > 0 && <details className="applicant-document-review applicant-detail-disclosure">
+                  <summary><h3>Document review</h3></summary>
                   {Object.entries(selectedApplication.documents || {}).map(([key]) => {
                     const reviewStatus = selectedApplication.documentReviews?.[key] || 'Pending review'
                     const reviewNote = selectedApplication.documentReviewNotes?.[key]
@@ -764,7 +906,7 @@ export default function ApplicantDashboard() {
                       </p>
                     )
                   })}
-                </div>
+                </details>}
 
                 <div className="applicant-modal-actions">
                   <button type="button" className="application-view-button" onClick={() => printExcelForm(selectedApplication._id)}>
