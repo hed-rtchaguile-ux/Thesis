@@ -216,9 +216,9 @@ async function buildPrintFormDocument(application) {
       const contentHeight = contentBounds.bottom - contentBounds.top;
       if (!contentWidth || !contentHeight) throw new Error('The marriage license form has no printable dimensions.');
 
-      const verticalMargin = 0.3 * 96;
+      const verticalMargin = 0.27 * 96;
       const targetWidth = pageBounds.width * 0.94;
-      const bottomMargin = pageBounds.height * 0.02;
+      const bottomMargin = pageBounds.height * 0.022;
       const targetHeight = pageBounds.height - verticalMargin - bottomMargin;
       const scaleX = targetWidth / contentWidth;
       const scaleY = targetHeight / contentHeight;
