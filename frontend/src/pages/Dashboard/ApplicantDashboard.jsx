@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
+import { appointmentTimeOptions } from '../../appointmentTimeSlots'
 import DocumentPreview from './DocumentPreview'
 import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
@@ -23,6 +24,10 @@ export default function ApplicantDashboard() {
   const [selectedApplication, setSelectedApplication] = useState(null)
   const [editingSection, setEditingSection] = useState('')
   const [editForm, setEditForm] = useState({})
+  const [appointmentSlots, setAppointmentSlots] = useState([])
+  const [appointmentSlotsStatus, setAppointmentSlotsStatus] = useState('idle')
+  const [appointmentSlotsError, setAppointmentSlotsError] = useState('')
+  const [appointmentSlotsRefresh, setAppointmentSlotsRefresh] = useState(0)
   const [editDocuments, setEditDocuments] = useState({})
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
@@ -68,6 +73,51 @@ export default function ApplicantDashboard() {
     const refreshTimer = window.setInterval(refreshApplications, 30000)
     return () => window.clearInterval(refreshTimer)
   }, [user.email])
+
+  useEffect(() => {
+    let active = true
+    const applicationId = selectedApplication?._id
+    const date = editForm.appointmentDate
+    if (editingSection !== 'appointment' || !applicationId || !date) {
+      setAppointmentSlots([])
+      setAppointmentSlotsStatus('idle')
+      setAppointmentSlotsError('')
+      return () => {
+        active = false
+      }
+    }
+
+    setAppointmentSlots([])
+    setAppointmentSlotsStatus('loading')
+    setAppointmentSlotsError('')
+    const query = new URLSearchParams({ date, excludeApplicationId: applicationId })
+    apiFetch(`/api/appointment-slots?${query}`)
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Unable to load appointment availability.')
+        if (!Array.isArray(result.slots)) throw new Error('The appointment availability response was invalid.')
+        return result.slots
+      })
+      .then((slots) => {
+        if (!active) return
+        setAppointmentSlots(slots)
+        setAppointmentSlotsStatus('ready')
+        setEditForm((currentForm) => {
+          if (currentForm.appointmentDate !== date || !currentForm.appointmentTime) return currentForm
+          const selectedSlot = slots.find((slot) => slot.value === currentForm.appointmentTime)
+          return selectedSlot?.available ? currentForm : { ...currentForm, appointmentTime: '' }
+        })
+      })
+      .catch((error) => {
+        if (!active) return
+        setAppointmentSlotsStatus('error')
+        setAppointmentSlotsError(error.message)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [appointmentSlotsRefresh, editingSection, editForm.appointmentDate, selectedApplication?._id])
 
   const applicantNotifications = getApplicantNotifications(applications, true)
 
@@ -295,6 +345,14 @@ export default function ApplicantDashboard() {
 
   async function saveApplicationEdit(event) {
     event.preventDefault()
+    if (editingSection === 'appointment'
+      && (appointmentSlotsStatus !== 'ready'
+        || !appointmentSlots.some((slot) => slot.value === editForm.appointmentTime && slot.available))) {
+      setEditError(appointmentSlotsStatus === 'error'
+        ? appointmentSlotsError || 'Unable to verify appointment availability. Please try again.'
+        : 'Choose an available appointment time.')
+      return
+    }
     setIsSavingEdit(true)
     setEditError('')
 
@@ -368,7 +426,13 @@ export default function ApplicantDashboard() {
           ])),
         }),
       })
-      if (!response.ok) throw new Error('Unable to save your changes.')
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        if (response.status === 409 && editingSection === 'appointment') {
+          setAppointmentSlotsRefresh((current) => current + 1)
+        }
+        throw new Error(result?.message || 'Unable to save your changes.')
+      }
 
       const updatedApplication = await response.json()
       setApplications((currentApplications) => currentApplications.map((item) => (
@@ -385,8 +449,13 @@ export default function ApplicantDashboard() {
 
   function updateEditField(field, value) {
     const previouslyMarriedMatch = /^(groom|bride)PreviouslyMarried$/.exec(field)
+    if (field === 'appointmentDate' || field === 'appointmentTime') setEditError('')
     setEditForm((currentForm) => {
-      const nextForm = { ...currentForm, [field]: value }
+      const nextForm = {
+        ...currentForm,
+        [field]: value,
+        ...(field === 'appointmentDate' && currentForm.appointmentDate !== value ? { appointmentTime: '' } : {}),
+      }
       if (previouslyMarriedMatch && value === 'No') {
         const dissolutionPrefix = `${previouslyMarriedMatch[1]}Dissolution`
         Object.keys(nextForm).forEach((key) => {
@@ -417,8 +486,17 @@ export default function ApplicantDashboard() {
 
   function getApplicantInfoItems(fields, person) {
     const visibleFields = getVisibleEditFields(fields)
+    const visibleFieldSet = new Set(visibleFields)
     const groupedFields = new Set()
     const items = []
+    const advisorAddressFields = [
+      `${person}AdvisorResidenceHouseNo`,
+      `${person}AdvisorResidenceStreet`,
+      `${person}AdvisorResidenceBarangay`,
+      `${person}AdvisorResidenceCity`,
+      `${person}AdvisorResidenceProvince`,
+      `${person}AdvisorResidenceCountry`,
+    ]
     const getValue = (field) => String(editForm[field] ?? '').trim()
     const addGroup = (label, keys, fallbackKey, separator = ' ') => {
       keys.forEach((key) => groupedFields.add(key))
@@ -476,19 +554,21 @@ export default function ApplicantDashboard() {
       `${person}MotherResidenceProvince`,
       `${person}MotherResidenceCountry`,
     ], null, ', ')
-    addGroup("Advisor's address", [
-      `${person}AdvisorResidenceHouseNo`,
-      `${person}AdvisorResidenceStreet`,
-      `${person}AdvisorResidenceBarangay`,
-      `${person}AdvisorResidenceCity`,
-      `${person}AdvisorResidenceProvince`,
-      `${person}AdvisorResidenceCountry`,
-    ], null, ', ')
+    advisorAddressFields.forEach((field) => groupedFields.add(field))
 
-    visibleFields.forEach((field) => {
+    fields.forEach((field) => {
+      if (!visibleFieldSet.has(field)) {
+        if (field === `${person}AdvisorCitizenship`) {
+          addGroup("Advisor's address", advisorAddressFields.filter((addressField) => visibleFieldSet.has(addressField)), null, ', ')
+        }
+        return
+      }
       if (groupedFields.has(field)) return
       const label = formatEditFieldLabel(field.replace(new RegExp(`^${person}`, 'i'), ''))
       items.push({ label, value: getValue(field) })
+      if (field === `${person}AdvisorCitizenship`) {
+        addGroup("Advisor's address", advisorAddressFields.filter((addressField) => visibleFieldSet.has(addressField)), null, ', ')
+      }
     })
 
     return items
@@ -523,6 +603,36 @@ export default function ApplicantDashboard() {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
+            ) : field === 'appointmentTime' ? (
+              <>
+                <select
+                  value={String(editForm[field] ?? '')}
+                  onChange={(event) => updateEditField(field, event.target.value)}
+                  disabled={appointmentSlotsStatus !== 'ready'}
+                >
+                  <option value="">
+                    {appointmentSlotsStatus === 'loading'
+                      ? 'Checking availability...'
+                      : appointmentSlotsStatus === 'error'
+                        ? 'Availability unavailable'
+                        : 'Select a time'}
+                  </option>
+                  {appointmentTimeOptions.map(({ value, label }) => {
+                    const isAvailable = appointmentSlots.some((slot) => slot.value === value && slot.available)
+                    return (
+                      <option key={value} value={value} disabled={!isAvailable}>
+                        {isAvailable ? label : `${label} — Unavailable`}
+                      </option>
+                    )
+                  })}
+                </select>
+                {appointmentSlotsStatus === 'error' && (
+                  <small className="application-edit-error" role="alert">{appointmentSlotsError}</small>
+                )}
+                {appointmentSlotsStatus === 'ready' && appointmentSlots.every((slot) => !slot.available) && (
+                  <small role="status">No appointment times are available on this date.</small>
+                )}
+              </>
             ) : (
               <input
                 type={field === 'appointmentDate' ? 'date' : 'text'}
@@ -540,7 +650,11 @@ export default function ApplicantDashboard() {
     return (
       <>
         <button type="button" className="application-view-button" onClick={cancelSectionEdit}>Cancel</button>
-        <button type="submit" className="application-edit-button" disabled={isSavingEdit}>
+        <button
+          type="submit"
+          className="application-edit-button"
+          disabled={isSavingEdit || (editingSection === 'appointment' && appointmentSlotsStatus !== 'ready')}
+        >
           {isSavingEdit ? 'Saving...' : 'Save changes'}
         </button>
       </>

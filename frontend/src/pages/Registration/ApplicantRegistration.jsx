@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAllMunicipalities, getAllProvinces, getBarangaysByMunicipality, getMunicipalitiesByProvince } from '@aivangogh/ph-address'
 import { apiFetch, useAuth } from '../auth'
+import { appointmentTimeOptions, formatAppointmentTime } from '../../appointmentTimeSlots'
 import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
@@ -13,26 +14,6 @@ const FIXED_PAYMENT_METHOD = 'Over the counter (Cash)'
 const FIXED_PAYMENT_AMOUNT = '₱ 250.00'
 const REGISTRATION_DRAFT_TTL = 24 * 60 * 60 * 1000
 let registrationDraftDatabasePromise
-const appointmentTimeOptions = [
-  { value: '09:00', label: '9:00 AM' },
-  { value: '10:00', label: '10:00 AM' },
-  { value: '11:00', label: '11:00 AM' },
-  { value: '13:00', label: '1:00 PM' },
-  { value: '14:00', label: '2:00 PM' },
-  { value: '15:00', label: '3:00 PM' },
-  { value: '16:00', label: '4:00 PM' },
-]
-
-function formatAppointmentTime(value) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value)
-  if (!match) return value
-
-  const hour = Number(match[1])
-  const period = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${match[2]} ${period}`
-}
-
 function getDataUrlSize(dataUrl) {
   const base64 = dataUrl.split(',')[1] || ''
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
@@ -534,6 +515,9 @@ export default function ApplicantRegistration() {
   const [cityData, setCityData] = useState({})
   const [cityDataStatus, setCityDataStatus] = useState({})
   const [validationErrors, setValidationErrors] = useState({})
+  const [appointmentSlots, setAppointmentSlots] = useState([])
+  const [appointmentSlotsStatus, setAppointmentSlotsStatus] = useState('idle')
+  const [appointmentSlotsRefresh, setAppointmentSlotsRefresh] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const fileInputRefs = useRef({})
@@ -639,6 +623,48 @@ export default function ApplicantRegistration() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const appointmentDate = form.appointmentDate
+    if (!draftLoaded || !appointmentDate) {
+      setAppointmentSlots([])
+      setAppointmentSlotsStatus('idle')
+      return () => {
+        active = false
+      }
+    }
+
+    setAppointmentSlots([])
+    setAppointmentSlotsStatus('loading')
+    apiFetch(`/api/appointment-slots?date=${encodeURIComponent(appointmentDate)}`)
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Unable to load appointment availability.')
+        if (!Array.isArray(result.slots)) throw new Error('The appointment availability response was invalid.')
+        return result.slots
+      })
+      .then((slots) => {
+        if (!active) return
+        setAppointmentSlots(slots)
+        setAppointmentSlotsStatus('ready')
+        setValidationErrors((current) => ({ ...current, appointmentTime: '' }))
+        setForm((currentForm) => {
+          if (currentForm.appointmentDate !== appointmentDate || !currentForm.appointmentTime) return currentForm
+          const selectedSlot = slots.find((slot) => slot.value === currentForm.appointmentTime)
+          return selectedSlot?.available ? currentForm : { ...currentForm, appointmentTime: '' }
+        })
+      })
+      .catch((error) => {
+        if (!active) return
+        setAppointmentSlotsStatus('error')
+        setValidationErrors((current) => ({ ...current, appointmentTime: error.message }))
+      })
+
+    return () => {
+      active = false
+    }
+  }, [appointmentSlotsRefresh, draftLoaded, form.appointmentDate])
 
   async function checkApplicationEligibility() {
     setApplicationEligibility('checking')
@@ -780,7 +806,11 @@ export default function ApplicantRegistration() {
       : []
 
     setForm((current) => {
-      const nextForm = { ...current, [field]: value }
+      const nextForm = {
+        ...current,
+        [field]: value,
+        ...(field === 'appointmentDate' && current.appointmentDate !== value ? { appointmentTime: '' } : {}),
+      }
       dependentLocationFields.forEach((dependentField) => {
         nextForm[dependentField] = ''
       })
@@ -808,6 +838,7 @@ export default function ApplicantRegistration() {
       [field]: '',
       ...(dateErrorField ? { [`${dateErrorField}Dob`]: '' } : {}),
     }))
+    if (field === 'appointmentTime') setSubmitError('')
   }
 
   function renderDropdownField(field, label, optionKey, className = '', style) {
@@ -1179,6 +1210,11 @@ export default function ApplicantRegistration() {
       }
       if (!/^\d{2}:\d{2}$/.test(form.appointmentTime)) {
         errors.appointmentTime = 'Choose an appointment time.'
+      } else if (appointmentSlotsStatus !== 'ready'
+        || !appointmentSlots.some((slot) => slot.value === form.appointmentTime && slot.available)) {
+        errors.appointmentTime = appointmentSlotsStatus === 'error'
+          ? 'Unable to verify appointment availability. Please try again.'
+          : 'Choose an available appointment time.'
       }
     }
 
@@ -1245,6 +1281,7 @@ export default function ApplicantRegistration() {
 
       if (!response.ok) {
         const result = await response.json().catch(() => null)
+        if (response.status === 409) setAppointmentSlotsRefresh((current) => current + 1)
         const message = result?.message || (response.status === 413
           ? 'The application documents are too large to submit. Reduce the file sizes and try again.'
           : 'Unable to submit application.')
@@ -1762,14 +1799,31 @@ export default function ApplicantRegistration() {
             id="appointment-time"
             value={form.appointmentTime}
             onChange={(event) => updateField('appointmentTime', event.target.value)}
+            disabled={appointmentSlotsStatus !== 'ready'}
             aria-invalid={Boolean(validationErrors.appointmentTime)}
             required
           >
-            <option value="">Select a time</option>
-            {appointmentTimeOptions.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
+            <option value="">
+              {appointmentSlotsStatus === 'loading'
+                ? 'Checking availability...'
+                : appointmentSlotsStatus === 'error'
+                  ? 'Availability unavailable'
+                  : form.appointmentDate
+                    ? 'Select a time'
+                    : 'Choose a date first'}
+            </option>
+            {appointmentTimeOptions.map(({ value, label }) => {
+              const isAvailable = appointmentSlots.some((slot) => slot.value === value && slot.available)
+              return (
+                <option key={value} value={value} disabled={!isAvailable}>
+                  {isAvailable ? label : `${label} — Unavailable`}
+                </option>
+              )
+            })}
           </select>
+          {appointmentSlotsStatus === 'ready' && appointmentSlots.every((slot) => !slot.available) && (
+            <p className="field-error" role="status">No appointment times are available on this date.</p>
+          )}
           <FieldError message={validationErrors.appointmentTime} />
         </div>
 

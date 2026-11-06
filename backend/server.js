@@ -27,10 +27,20 @@ const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
 const APPLICATION_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
 const FIXED_PAYMENT_METHOD = 'Over the counter (Cash)';
 const FIXED_PAYMENT_AMOUNT = '₱ 250.00';
+const APPOINTMENT_TIME_OPTIONS = [
+  { value: '09:00', label: '9:00 AM' },
+  { value: '10:00', label: '10:00 AM' },
+  { value: '11:00', label: '11:00 AM' },
+  { value: '13:00', label: '1:00 PM' },
+  { value: '14:00', label: '2:00 PM' },
+  { value: '15:00', label: '3:00 PM' },
+  { value: '16:00', label: '4:00 PM' },
+];
 const scrypt = promisify(crypto.scrypt);
 const passwordResetRequestWindows = new Map();
 const registrationRequestWindows = new Map();
 let databaseConnectionPromise;
+let applicationIndexesReady = false;
 
 const applicationSchema = new mongoose.Schema({
   applicantEmail: { type: String, required: true, index: true },
@@ -48,6 +58,7 @@ const applicationSchema = new mongoose.Schema({
   brideEmail: String,
   preferredAppointmentDate: String,
   preferredAppointmentTime: String,
+  appointmentSlotKey: String,
   appointmentDate: String,
   appointmentTime: String,
   appointmentLocation: String,
@@ -73,6 +84,10 @@ const applicationSchema = new mongoose.Schema({
   status: { type: String, default: 'For Review' },
   licenseReleaseDate: String,
 }, { timestamps: true });
+applicationSchema.index(
+  { appointmentSlotKey: 1 },
+  { unique: true, sparse: true, name: 'unique_appointment_slot' },
+);
 
 const Application = mongoose.model('Application', applicationSchema, 'applications');
 const accountSchema = new mongoose.Schema({
@@ -109,12 +124,15 @@ async function connectToDatabase() {
   if (!DATABASE_CONNECTION_STRING) {
     throw new Error('MONGODB_URI is not configured.');
   }
-  if (mongoose.connection.readyState === 1) return;
+  if (mongoose.connection.readyState === 1 && applicationIndexesReady) return;
   if (!databaseConnectionPromise) {
-    databaseConnectionPromise = mongoose.connect(DATABASE_CONNECTION_STRING, {
-      serverSelectionTimeoutMS: 10000,
-      retryWrites: true,
-    }).then(async () => {
+    const connection = mongoose.connection.readyState === 1
+      ? Promise.resolve()
+      : mongoose.connect(DATABASE_CONNECTION_STRING, {
+        serverSelectionTimeoutMS: 10000,
+        retryWrites: true,
+      });
+    databaseConnectionPromise = connection.then(async () => {
       await initializeDemoAccounts();
       console.log('Successfully connected to MongoDB database: wedrings');
 
@@ -176,6 +194,8 @@ async function connectToDatabase() {
       } catch (collectionError) {
         console.error('MongoDB collection setup error:', collectionError);
       }
+      await Application.createIndexes();
+      applicationIndexesReady = true;
     }).catch((error) => {
       databaseConnectionPromise = undefined;
       console.error('MongoDB connection error:', error.message);
@@ -846,6 +866,84 @@ app.get('/', (req, res) => {
   res.send('The WedRings API is fully active.');
 });
 
+function isValidAppointmentDate(value) {
+  const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00Z`)
+    : null;
+  return Boolean(parsedDate
+    && !Number.isNaN(parsedDate.getTime())
+    && parsedDate.toISOString().slice(0, 10) === value);
+}
+
+function getAppointmentSlotKey(date, time) {
+  return `${date}|${time}`;
+}
+
+async function getOccupiedAppointmentTimes(date, excludeApplicationId) {
+  const filter = {
+    $or: [
+      { preferredAppointmentDate: date },
+      { 'applicationData.preferredAppointmentDate': date },
+      { appointmentDate: date },
+    ],
+  };
+  if (excludeApplicationId) filter._id = { $ne: excludeApplicationId };
+
+  const applications = await Application.find(filter)
+    .select('_id preferredAppointmentDate preferredAppointmentTime appointmentDate appointmentTime applicationData')
+    .lean();
+  const occupiedTimes = new Set();
+  const availableTimeValues = new Set(APPOINTMENT_TIME_OPTIONS.map(({ value }) => value));
+
+  applications.forEach((application) => {
+    const applicationData = application.applicationData || {};
+    const preferredDate = application.preferredAppointmentDate || applicationData.preferredAppointmentDate;
+    const preferredTime = application.preferredAppointmentTime || applicationData.preferredAppointmentTime;
+    if (preferredDate === date && availableTimeValues.has(preferredTime)) occupiedTimes.add(preferredTime);
+    if (application.appointmentDate === date && availableTimeValues.has(application.appointmentTime)) {
+      occupiedTimes.add(application.appointmentTime);
+    }
+  });
+
+  return occupiedTimes;
+}
+
+app.get('/api/appointment-slots', requireRoles(['applicant']), async (req, res) => {
+  try {
+    const date = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+    if (!isValidAppointmentDate(date)) {
+      return res.status(400).json({ message: 'Choose a valid appointment date.' });
+    }
+
+    const excludeApplicationId = typeof req.query.excludeApplicationId === 'string'
+      ? req.query.excludeApplicationId.trim()
+      : '';
+    if (excludeApplicationId) {
+      if (!mongoose.isValidObjectId(excludeApplicationId)) {
+        return res.status(400).json({ message: 'The application identifier is invalid.' });
+      }
+      const ownApplication = await Application.exists({
+        _id: excludeApplicationId,
+        applicantEmail: req.user.email,
+      });
+      if (!ownApplication) return res.status(404).json({ message: 'Application not found.' });
+    }
+
+    const occupiedTimes = await getOccupiedAppointmentTimes(date, excludeApplicationId || undefined);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      date,
+      slots: APPOINTMENT_TIME_OPTIONS.map((slot) => ({
+        ...slot,
+        available: !occupiedTimes.has(slot.value),
+      })),
+    });
+  } catch (error) {
+    console.error('Unable to load appointment availability:', error.message);
+    res.status(500).json({ message: 'Unable to load appointment availability.' });
+  }
+});
+
 app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
   let claimedApplicationId;
   try {
@@ -854,10 +952,7 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     // "To be assigned by office" placeholder stored in appointmentDate.
     const preferredAppointmentDate = String(req.body.preferredAppointmentDate || req.body.appointmentDate || '').trim();
     const preferredAppointmentTime = String(req.body.preferredAppointmentTime || req.body.appointmentTime || '').trim();
-    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(preferredAppointmentDate)
-      ? new Date(`${preferredAppointmentDate}T00:00:00Z`)
-      : null;
-    if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== preferredAppointmentDate) {
+    if (!isValidAppointmentDate(preferredAppointmentDate)) {
       return res.status(400).json({ message: 'Enter a valid appointment date.' });
     }
     const today = new Date();
@@ -865,7 +960,7 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     if (preferredAppointmentDate < todayKey) {
       return res.status(400).json({ message: 'Appointment dates cannot be in the past.' });
     }
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(preferredAppointmentTime)) {
+    if (!APPOINTMENT_TIME_OPTIONS.some(({ value }) => value === preferredAppointmentTime)) {
       return res.status(400).json({ message: 'Enter a valid appointment time.' });
     }
 
@@ -874,6 +969,10 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
       return res.status(409).json({
         message: 'This account already has an application. Request its deletion and wait for admin approval before applying again.',
       });
+    }
+    const occupiedTimes = await getOccupiedAppointmentTimes(preferredAppointmentDate);
+    if (occupiedTimes.has(preferredAppointmentTime)) {
+      return res.status(409).json({ message: 'That appointment time is no longer available. Choose another time.' });
     }
 
     claimedApplicationId = new mongoose.Types.ObjectId();
@@ -931,10 +1030,12 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     delete applicantFields.firstCounselingApprovedAt;
     delete applicantFields.secondAppointmentReminderClaimedAt;
     delete applicantFields.secondAppointmentReminderSentAt;
+    delete applicantFields.appointmentSlotKey;
     const application = await Application.create({
       ...applicantFields,
       _id: claimedApplicationId,
       applicantEmail: req.user.email,
+      appointmentSlotKey: getAppointmentSlotKey(preferredAppointmentDate, preferredAppointmentTime),
       status: 'For Review',
       paymentMethod: FIXED_PAYMENT_METHOD,
       paymentAmount: FIXED_PAYMENT_AMOUNT,
@@ -953,6 +1054,9 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
         { _id: req.user.id, activeApplicationId: claimedApplicationId },
         { $unset: { activeApplicationId: 1, activeApplicationClaimedAt: 1 } },
       );
+    }
+    if (error.code === 11000 && error.keyPattern?.appointmentSlotKey) {
+      return res.status(409).json({ message: 'That appointment time was just booked. Choose another time.' });
     }
     res.status(400).json({ message: 'Unable to save application.', error: error.message });
   }
@@ -1273,6 +1377,7 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
       'appointmentDate',
       'appointmentTime',
       'appointmentLocation',
+      'appointmentSlotKey',
       'secondAppointmentDate',
       'secondAppointmentTime',
       'firstCounselingApprovedAt',
@@ -1315,6 +1420,48 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
       return res.status(409).json({ message: 'Editing is unavailable while a deletion request is pending.' });
     }
 
+    const applicationData = editableFields.applicationData && typeof editableFields.applicationData === 'object'
+      ? editableFields.applicationData
+      : {};
+    const preferredAppointmentDate = String(
+      editableFields.preferredAppointmentDate
+      || applicationData.preferredAppointmentDate
+      || existingApplication.preferredAppointmentDate
+      || '',
+    ).trim();
+    const preferredAppointmentTime = String(
+      editableFields.preferredAppointmentTime
+      || applicationData.preferredAppointmentTime
+      || existingApplication.preferredAppointmentTime
+      || '',
+    ).trim();
+    if (!isValidAppointmentDate(preferredAppointmentDate)) {
+      return res.status(400).json({ message: 'Choose a valid appointment date.' });
+    }
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (preferredAppointmentDate < todayKey) {
+      return res.status(400).json({ message: 'Appointment dates cannot be in the past.' });
+    }
+    if (!APPOINTMENT_TIME_OPTIONS.some(({ value }) => value === preferredAppointmentTime)) {
+      return res.status(400).json({ message: 'Choose a valid appointment time.' });
+    }
+
+    const occupiedTimes = await getOccupiedAppointmentTimes(preferredAppointmentDate, existingApplication._id);
+    if (occupiedTimes.has(preferredAppointmentTime)) {
+      return res.status(409).json({ message: 'That appointment time is no longer available. Choose another time.' });
+    }
+    editableFields.preferredAppointmentDate = preferredAppointmentDate;
+    editableFields.preferredAppointmentTime = preferredAppointmentTime;
+    editableFields.appointmentSlotKey = getAppointmentSlotKey(preferredAppointmentDate, preferredAppointmentTime);
+    if (editableFields.applicationData && typeof editableFields.applicationData === 'object' && !Array.isArray(editableFields.applicationData)) {
+      editableFields.applicationData = {
+        ...editableFields.applicationData,
+        preferredAppointmentDate,
+        preferredAppointmentTime,
+      };
+    }
+
     const replacedFlaggedDocuments = Object.keys(editableFields.documents || {}).filter((documentKey) => (
       existingApplication.documents?.[documentKey] !== editableFields.documents[documentKey]
       && existingApplication.documentReviews?.[documentKey] === 'Needs Redo'
@@ -1349,6 +1496,9 @@ app.put('/api/applications/:id', requireRoles(['applicant']), async (req, res) =
     res.set('Cache-Control', 'no-store');
     res.json(application);
   } catch (error) {
+    if (error.code === 11000 && error.keyPattern?.appointmentSlotKey) {
+      return res.status(409).json({ message: 'That appointment time was just booked. Choose another time.' });
+    }
     res.status(400).json({ message: 'Unable to update application.', error: error.message });
   }
 });
