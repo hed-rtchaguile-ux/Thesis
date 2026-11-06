@@ -1,18 +1,23 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
-import logoImage from './assets/wedrings-mark.png'
+import logoImage from './assets/wedrings-mark-small.png'
 import { AuthProvider } from './pages/AuthContext'
 import { useAuth } from './pages/auth'
-import ApplicantDashboard from './pages/Dashboard/ApplicantDashboard'
-import NotificationsInbox from './pages/Dashboard/NotificationsInbox.jsx'
-import SuperAdminDashboard from './pages/Dashboard/SuperAdminDashboard'
-import ApplicantProfile from './pages/ApplicantProfile'
-import ApplicantRegistration from './pages/Registration/ApplicantRegistration'
-import ApplicantSignup from './pages/Registration/ApplicantSignup'
-import LoginPage from './pages/login/LoginPage'
-import PasswordRecoveryPage from './pages/login/PasswordRecoveryPage'
 import ProtectedRoute from './pages/ProtectedRoute'
+
+const ApplicantDashboard = lazy(() => import('./pages/Dashboard/ApplicantDashboard'))
+const NotificationsInbox = lazy(() => import('./pages/Dashboard/NotificationsInbox'))
+const SuperAdminDashboard = lazy(() => import('./pages/Dashboard/SuperAdminDashboard'))
+const ApplicantProfile = lazy(() => import('./pages/ApplicantProfile'))
+const ApplicantRegistration = lazy(() => import('./pages/Registration/ApplicantRegistration'))
+const ApplicantSignup = lazy(() => import('./pages/Registration/ApplicantSignup'))
+const LoginPage = lazy(() => import('./pages/login/LoginPage'))
+const PasswordRecoveryPage = lazy(() => import('./pages/login/PasswordRecoveryPage'))
+
+function PageLoadingFallback() {
+  return <div className="page-loading" role="status">Loading page...</div>
+}
 
 function ApplicantLayout() {
   const navigate = useNavigate()
@@ -98,44 +103,46 @@ function ApplicantLayout() {
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<PasswordRecoveryPage mode="request" />} />
-        <Route path="/reset-password" element={<PasswordRecoveryPage mode="reset" />} />
-        <Route path="/register" element={<ApplicantSignup />} />
-        <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
-        <Route path="/admin/login" element={<Navigate to="/login" replace />} />
-        <Route path="/superadmin/login" element={<Navigate to="/login" replace />} />
+      <Suspense fallback={<PageLoadingFallback />}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<PasswordRecoveryPage mode="request" />} />
+          <Route path="/reset-password" element={<PasswordRecoveryPage mode="reset" />} />
+          <Route path="/register" element={<ApplicantSignup />} />
+          <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
+          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+          <Route path="/superadmin/login" element={<Navigate to="/login" replace />} />
 
-        <Route element={<ProtectedRoute role="applicant" />}>
-          <Route element={<ApplicantLayout />}>
-            <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
-            <Route path="/applicant/notifications" element={<NotificationsInbox />} />
-            <Route path="/applicant/profile" element={<ApplicantProfile />} />
-            <Route path="/applicant/registration" element={<ApplicantRegistration />} />
+          <Route element={<ProtectedRoute role="applicant" />}>
+            <Route element={<ApplicantLayout />}>
+              <Route path="/applicant/dashboard" element={<ApplicantDashboard />} />
+              <Route path="/applicant/notifications" element={<NotificationsInbox />} />
+              <Route path="/applicant/profile" element={<ApplicantProfile />} />
+              <Route path="/applicant/registration" element={<ApplicantRegistration />} />
+            </Route>
           </Route>
-        </Route>
 
-        <Route element={<ProtectedRoute roles={['admin', 'superadmin']} />}>
-          <Route path="/admin/dashboard" element={<SuperAdminDashboard isAdmin />} />
-          <Route path="/admin/profile" element={<ApplicantProfile />} />
-          <Route path="/admin/verified-records" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/all-applications" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/new-submissions" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/appointments" element={<SuperAdminDashboard isAdmin />} />
-          <Route path="/admin/reports" element={<SuperAdminDashboard isAdmin />} />
-        </Route>
+          <Route element={<ProtectedRoute roles={['admin', 'superadmin']} />}>
+            <Route path="/admin/dashboard" element={<SuperAdminDashboard isAdmin />} />
+            <Route path="/admin/profile" element={<ApplicantProfile />} />
+            <Route path="/admin/verified-records" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/all-applications" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/new-submissions" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/appointments" element={<SuperAdminDashboard isAdmin />} />
+            <Route path="/admin/reports" element={<SuperAdminDashboard isAdmin />} />
+          </Route>
 
-        <Route element={<ProtectedRoute role="superadmin" />}>
-          <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
-          <Route path="/superadmin/profile" element={<ApplicantProfile />} />
-          <Route path="/superadmin/appointments" element={<SuperAdminDashboard />} />
-          <Route path="/superadmin/reports" element={<SuperAdminDashboard />} />
-        </Route>
+          <Route element={<ProtectedRoute role="superadmin" />}>
+            <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
+            <Route path="/superadmin/profile" element={<ApplicantProfile />} />
+            <Route path="/superadmin/appointments" element={<SuperAdminDashboard />} />
+            <Route path="/superadmin/reports" element={<SuperAdminDashboard />} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   )
 }

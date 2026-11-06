@@ -10,7 +10,7 @@ import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { getDocumentLabel } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
-import logoImage from '../../assets/wedrings-mark.png'
+import logoImage from '../../assets/wedrings-mark-small.png'
 import './ApplicantDashboard.css'
 
 function getAppointmentDateKey(value) {

@@ -1,3 +1,11 @@
+.page-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: #53689f;
+  font-size: 14px;
+}
+
 .app-shell {
   display: flex;
   align-items: stretch;

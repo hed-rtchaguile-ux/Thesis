@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
-import logoImage from '../../assets/wedrings-mark.png'
+import logoImage from '../../assets/wedrings-mark-small.png'
 import './LoginPage.css'
 
 export default function LoginPage() {

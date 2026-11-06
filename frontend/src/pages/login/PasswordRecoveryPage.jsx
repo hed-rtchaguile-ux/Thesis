@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import logoImage from '../../assets/wedrings-mark.png'
+import logoImage from '../../assets/wedrings-mark-small.png'
 import './LoginPage.css'
 
 async function readApiResponse(response) {
