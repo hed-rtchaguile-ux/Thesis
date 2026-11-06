@@ -224,7 +224,7 @@ async function buildPrintFormDocument(application) {
       const scaleY = targetHeight / contentHeight;
       const horizontalOffset = (pageBounds.width - targetWidth) / 2;
       const offsetX = horizontalOffset - (scaleX * contentBounds.left);
-      const verticalShift = pageBounds.height * 0.05;
+      const verticalShift = pageBounds.height * 0.02;
       const offsetY = verticalMargin - (scaleY * contentBounds.top) - verticalShift;
       table.style.transform = \`translate(\${offsetX}px, \${offsetY}px) scale(\${scaleX}, \${scaleY})\`;
     })();
