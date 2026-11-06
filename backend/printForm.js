@@ -218,7 +218,7 @@ async function buildPrintFormDocument(application) {
 
       const verticalMargin = 0.27 * 96;
       const targetWidth = pageBounds.width * 0.94;
-      const bottomMargin = pageBounds.height * 0.022;
+      const bottomMargin = pageBounds.height * (0.022 + 0.03);
       const targetHeight = pageBounds.height - verticalMargin - bottomMargin;
       const scaleX = targetWidth / contentWidth;
       const scaleY = targetHeight / contentHeight;
