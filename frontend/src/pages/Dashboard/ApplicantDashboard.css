@@ -1038,7 +1038,8 @@
   text-transform: uppercase;
 }
 
-.applicant-edit-grid input {
+.applicant-edit-grid input,
+.applicant-edit-grid select {
   width: 100%;
   box-sizing: border-box;
   padding: 10px;

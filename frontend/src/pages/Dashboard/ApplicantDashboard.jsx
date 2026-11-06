@@ -514,11 +514,22 @@ export default function ApplicantDashboard() {
           .map((field) => (
           <label key={field}>
             {formatEditFieldLabel(field)}
-            <input
-              type={field === 'appointmentDate' ? 'date' : 'text'}
-              value={String(editForm[field] ?? '')}
-              onChange={(event) => updateEditField(field, event.target.value)}
-            />
+            {/^(groom|bride)PreviouslyMarried$/.test(field) ? (
+              <select
+                value={String(editForm[field] ?? '')}
+                onChange={(event) => updateEditField(field, event.target.value)}
+              >
+                <option value="">Select</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            ) : (
+              <input
+                type={field === 'appointmentDate' ? 'date' : 'text'}
+                value={String(editForm[field] ?? '')}
+                onChange={(event) => updateEditField(field, event.target.value)}
+              />
+            )}
           </label>
           ))}
       </div>
