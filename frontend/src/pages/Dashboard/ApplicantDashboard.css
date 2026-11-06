@@ -1168,15 +1168,18 @@
 
 .applicant-detail-disclosure > summary::after,
 .applicant-document-review > summary::after {
-  content: '+';
+  content: '›';
+  display: inline-block;
   color: #53689f;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
+  line-height: 1;
+  transition: transform 160ms ease;
 }
 
 .applicant-detail-disclosure[open] > summary::after,
 .applicant-document-review[open] > summary::after {
-  content: '−';
+  transform: rotate(90deg);
 }
 
 .applicant-detail-disclosure > summary h3,

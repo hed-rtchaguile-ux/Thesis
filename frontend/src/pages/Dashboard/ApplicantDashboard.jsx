@@ -384,7 +384,17 @@ export default function ApplicantDashboard() {
   }
 
   function updateEditField(field, value) {
-    setEditForm((currentForm) => ({ ...currentForm, [field]: value }))
+    const previouslyMarriedMatch = /^(groom|bride)PreviouslyMarried$/.exec(field)
+    setEditForm((currentForm) => {
+      const nextForm = { ...currentForm, [field]: value }
+      if (previouslyMarriedMatch && value === 'No') {
+        const dissolutionPrefix = `${previouslyMarriedMatch[1]}Dissolution`
+        Object.keys(nextForm).forEach((key) => {
+          if (key.startsWith(dissolutionPrefix)) nextForm[key] = ''
+        })
+      }
+      return nextForm
+    })
   }
 
   function updateEditDocument(key, event) {
@@ -405,6 +415,85 @@ export default function ApplicantDashboard() {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
   }
 
+  function getApplicantInfoItems(fields, person) {
+    const visibleFields = getVisibleEditFields(fields)
+    const groupedFields = new Set()
+    const items = []
+    const getValue = (field) => String(editForm[field] ?? '').trim()
+    const addGroup = (label, keys, fallbackKey, separator = ' ') => {
+      keys.forEach((key) => groupedFields.add(key))
+      const value = keys.map(getValue).filter(Boolean).join(separator) || (fallbackKey ? getValue(fallbackKey) : '')
+      if (value && value.toLowerCase() !== 'not provided') items.push({ label, value })
+    }
+
+    addGroup('Full name', [
+      `${person}FirstName`,
+      `${person}MiddleName`,
+      `${person}LastName`,
+      `${person}Suffix`,
+    ], `${person}FullName`)
+    addGroup('Date of birth', [
+      `${person}DobMonth`,
+      `${person}DobDay`,
+      `${person}DobYear`,
+    ], `${person}Dob`, '/')
+    addGroup('Place of birth', [
+      `${person}BirthPlaceCity`,
+      `${person}BirthPlaceProvince`,
+      `${person}BirthPlaceCountry`,
+    ], `${person}PlaceOfBirth`, ', ')
+    addGroup('Address', [
+      `${person}ResidenceHouseNo`,
+      `${person}ResidenceStreet`,
+      `${person}ResidenceBarangay`,
+      `${person}ResidenceCity`,
+      `${person}ResidenceProvince`,
+      `${person}ResidenceCountry`,
+    ], `${person}Residence`, ', ')
+    addGroup("Father's name", [
+      `${person}FatherFirstName`,
+      `${person}FatherMiddleName`,
+      `${person}FatherLastName`,
+    ], `${person}FatherName`)
+    addGroup("Father's address", [
+      `${person}FatherResidenceHouseNo`,
+      `${person}FatherResidenceStreet`,
+      `${person}FatherResidenceBarangay`,
+      `${person}FatherResidenceCity`,
+      `${person}FatherResidenceProvince`,
+      `${person}FatherResidenceCountry`,
+    ], null, ', ')
+    addGroup("Mother's maiden name", [
+      `${person}MotherMaidenFirstName`,
+      `${person}MotherMaidenMiddleName`,
+      `${person}MotherMaidenLastName`,
+    ], `${person}MotherMaidenName`)
+    addGroup("Mother's address", [
+      `${person}MotherResidenceHouseNo`,
+      `${person}MotherResidenceStreet`,
+      `${person}MotherResidenceBarangay`,
+      `${person}MotherResidenceCity`,
+      `${person}MotherResidenceProvince`,
+      `${person}MotherResidenceCountry`,
+    ], null, ', ')
+    addGroup("Advisor's address", [
+      `${person}AdvisorResidenceHouseNo`,
+      `${person}AdvisorResidenceStreet`,
+      `${person}AdvisorResidenceBarangay`,
+      `${person}AdvisorResidenceCity`,
+      `${person}AdvisorResidenceProvince`,
+      `${person}AdvisorResidenceCountry`,
+    ], null, ', ')
+
+    visibleFields.forEach((field) => {
+      if (groupedFields.has(field)) return
+      const label = formatEditFieldLabel(field.replace(new RegExp(`^${person}`, 'i'), ''))
+      items.push({ label, value: getValue(field) })
+    })
+
+    return items
+  }
+
   function cancelSectionEdit() {
     setEditForm(getEditableApplicationData(selectedApplication))
     setEditDocuments(selectedApplication.documents || {})
@@ -415,7 +504,14 @@ export default function ApplicantDashboard() {
   function renderEditFields(fields) {
     return (
       <div className="applicant-edit-grid">
-        {fields.map((field) => (
+        {fields
+          .filter((field) => {
+            const personMatch = /^(groom|bride)/.exec(field)
+            return !personMatch
+              || !/Dissolution/.test(field)
+              || editForm[`${personMatch[1]}PreviouslyMarried`] === 'Yes'
+          })
+          .map((field) => (
           <label key={field}>
             {formatEditFieldLabel(field)}
             <input
@@ -424,7 +520,7 @@ export default function ApplicantDashboard() {
               onChange={(event) => updateEditField(field, event.target.value)}
             />
           </label>
-        ))}
+          ))}
       </div>
     )
   }
@@ -683,7 +779,6 @@ export default function ApplicantDashboard() {
                       <div className="application-actions">
                         <button type="button" className="application-view-button" onClick={() => openApplication(item)}>View submission</button>
                         <button type="button" className="application-view-button" onClick={() => printExcelForm(item._id)}>Print form</button>
-                        <button type="button" className="application-edit-button" onClick={() => openApplication(item)}>Request edit</button>
                         {item.editRequestStatus && (
                           <span className="edit-request-status">
                             {item.editRequestStatus === 'Pending'
@@ -745,48 +840,6 @@ export default function ApplicantDashboard() {
                 <button type="button" className="applicant-modal-close" onClick={() => setSelectedApplication(null)} aria-label="Close application">x</button>
               </div>
 
-              <section className="applicant-detail-card applicant-edit-request">
-                <h3>Request to edit application</h3>
-                {canEditApplication ? (
-                  <>
-                    <p>Your request was approved. You can edit and save information in multiple sections. Finish editing when you are done.</p>
-                    {!editingSection && (
-                      <button type="button" className="application-edit-button" onClick={() => void finishApplicationEdit()} disabled={isFinishingEdit}>
-                        {isFinishingEdit ? 'Finishing...' : 'Finish editing'}
-                      </button>
-                    )}
-                  </>
-                ) : selectedApplication.editRequestStatus === 'Pending' ? (
-                  <>
-                    <p>Your edit request is awaiting admin review.</p>
-                    <p><strong>Requested change:</strong> {selectedApplication.editRequestComment}</p>
-                  </>
-                ) : selectedApplication.deletionRequestStatus === 'Pending' ? (
-                  <p>Editing is unavailable while a deletion request is pending.</p>
-                ) : (
-                  <form onSubmit={requestApplicationEdit}>
-                    {selectedApplication.editRequestStatus === 'Rejected' && (
-                      <p>Your previous edit request was not approved. You may submit a new request.</p>
-                    )}
-                    <label className="edit-request-comment">
-                      What would you like to edit?
-                      <textarea
-                        rows="3"
-                        maxLength="1000"
-                        value={editRequestComment}
-                        onChange={(event) => setEditRequestComment(event.target.value)}
-                        placeholder="Describe the information you need to change."
-                        required
-                      />
-                    </label>
-                    <button type="submit" className="application-edit-button" disabled={isRequestingEdit}>
-                      {isRequestingEdit ? 'Sending request...' : 'Submit edit request'}
-                    </button>
-                  </form>
-                )}
-                {editError && <p className="application-edit-error" role="alert">{editError}</p>}
-              </section>
-
               <div className="applicant-submission-details">
                 <details className="applicant-detail-card applicant-detail-disclosure">
                   <summary><h3>Groom information</h3></summary>
@@ -799,8 +852,8 @@ export default function ApplicantDashboard() {
                   ) : (
                     <>
                       {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('groom'); setEditError('') }}>Edit groom information</button>}
-                      {getVisibleEditFields(groomEditFields).map((field) => (
-                    <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
+                      {getApplicantInfoItems(groomEditFields, 'groom').map(({ label, value }) => (
+                    <p key={label}><strong>{label}:</strong> {value}</p>
                       ))}
                     </>
                   )}
@@ -817,8 +870,8 @@ export default function ApplicantDashboard() {
                   ) : (
                     <>
                       {canEditApplication && <button type="button" className="application-edit-button" onClick={() => { setEditingSection('bride'); setEditError('') }}>Edit bride information</button>}
-                      {getVisibleEditFields(brideEditFields).map((field) => (
-                    <p key={field}><strong>{formatEditFieldLabel(field)}:</strong> {editForm[field] || 'Not provided'}</p>
+                      {getApplicantInfoItems(brideEditFields, 'bride').map(({ label, value }) => (
+                    <p key={label}><strong>{label}:</strong> {value}</p>
                       ))}
                     </>
                   )}
@@ -914,6 +967,48 @@ export default function ApplicantDashboard() {
                   </button>
                 </div>
               </div>
+
+              <section className="applicant-detail-card applicant-edit-request">
+                <h3>Request to edit application</h3>
+                {canEditApplication ? (
+                  <>
+                    <p>Your request was approved. You can edit and save information in multiple sections. Finish editing when you are done.</p>
+                    {!editingSection && (
+                      <button type="button" className="application-edit-button" onClick={() => void finishApplicationEdit()} disabled={isFinishingEdit}>
+                        {isFinishingEdit ? 'Finishing...' : 'Finish editing'}
+                      </button>
+                    )}
+                  </>
+                ) : selectedApplication.editRequestStatus === 'Pending' ? (
+                  <>
+                    <p>Your edit request is awaiting admin review.</p>
+                    <p><strong>Requested change:</strong> {selectedApplication.editRequestComment}</p>
+                  </>
+                ) : selectedApplication.deletionRequestStatus === 'Pending' ? (
+                  <p>Editing is unavailable while a deletion request is pending.</p>
+                ) : (
+                  <form onSubmit={requestApplicationEdit}>
+                    {selectedApplication.editRequestStatus === 'Rejected' && (
+                      <p>Your previous edit request was not approved. You may submit a new request.</p>
+                    )}
+                    <label className="edit-request-comment">
+                      What would you like to edit?
+                      <textarea
+                        rows="3"
+                        maxLength="1000"
+                        value={editRequestComment}
+                        onChange={(event) => setEditRequestComment(event.target.value)}
+                        placeholder="Describe the information you need to change."
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="application-edit-button" disabled={isRequestingEdit}>
+                      {isRequestingEdit ? 'Sending request...' : 'Submit edit request'}
+                    </button>
+                  </form>
+                )}
+                {editError && <p className="application-edit-error" role="alert">{editError}</p>}
+              </section>
             </section>
           </div>
         )}
