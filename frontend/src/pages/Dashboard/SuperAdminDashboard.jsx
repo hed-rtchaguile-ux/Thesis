@@ -4,11 +4,10 @@ import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
-import DeletionRequestReview from './DeletionRequestReview'
-import EditRequestReview from './EditRequestReview'
+import AdminApplicationEditor from './AdminApplicationEditor'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
-import { getDocumentLabel } from './documentLabels'
+import { getDocumentLabel, isHiddenMarriageLicenseDocument } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark-small.png'
 import './ApplicantDashboard.css'
@@ -116,7 +115,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   }
 
   function confirmRejection(applicationId) {
-    const confirmed = window.confirm('Reject this submitted application? The applicant will be notified and asked to make the required changes.')
+    const confirmed = window.confirm('Reject this submitted application? The applicant will be notified to contact the office for assistance.')
     if (confirmed) updateApplicationStatus(applicationId, 'Rejected')
   }
 
@@ -242,7 +241,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
 
           {isReportsPage && <ReportCards applications={applications} showDateFilter />}
 
-          {!isAppointmentsPage && <div className="summary-grid">
+          {!isAppointmentsPage && !isReportsPage && <div className="summary-grid">
             <article className="summary-card">
               <div className="card-icon" aria-hidden="true">▣</div>
               <div className="summary-copy">
@@ -297,13 +296,11 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                             <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
                               {application.firstCounselingApprovedAt
                                 ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
-                                : '1st Counseling'}
+                                : '1st Appointment'}
                             </small>
                           )}
                         </div>
                       )}
-                      {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
-                      {application.editRequestStatus === 'Pending' && <small className="edit-request-badge">Edit requested</small>}
                     </div>
                     {isAppointmentsPage
                       ? <div className="admin-appointment-actions">
@@ -340,22 +337,14 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
             : detailsError ? <p className="admin-empty-state" role="alert">{detailsError}</p>
               : selectedApplicationDetails?._id === selectedApplication._id && <SuperAdminApplicationDetails
                 application={selectedApplicationDetails}
-                canApproveFirstCounseling={!isAdmin}
+                canApproveFirstCounseling
                 updatingDocumentKey={updatingDocumentKey}
                 onDocumentReview={updateDocumentReview}
                 onAppointmentSaved={(updatedApplication) => {
                   setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
                   setSelectedApplicationDetails(updatedApplication)
                 }}
-                onDeletionReviewed={(result) => {
-                  if (result.deleted) {
-                    setApplications((currentApplications) => currentApplications.filter((item) => item._id !== result.applicationId))
-                    closeApplicationDetails()
-                  } else {
-                    setApplications((currentApplications) => currentApplications.map((item) => item._id === result.application._id ? result.application : item))
-                  }
-                }}
-                onEditRequestReviewed={(updatedApplication) => {
+                onApplicationEdited={(updatedApplication) => {
                   setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
                   setSelectedApplicationDetails(updatedApplication)
                 }}
@@ -367,10 +356,9 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   )
 }
 
-function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onDeletionReviewed, onEditRequestReviewed }) {
-  const documents = Object.entries(application.documents || {})
+function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onApplicationEdited }) {
+  const documents = Object.entries(application.documents || {}).filter(([key]) => !isHiddenMarriageLicenseDocument(key))
   const documentReviews = application.documentReviews || {}
-  const psaDocument = documents.find(([key]) => key === 'psaMarriageLicense')
 
   function requestDocumentRedo(documentKey) {
     const reviewNote = window.prompt('What does the applicant need to redo for this document?')
@@ -388,40 +376,10 @@ function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, 
           ? <details className="admin-document-disclosure"><summary>View payment receipt</summary><DocumentPreview label="Payment receipt" value={application.paymentReceipt} /></details>
           : <p>Not uploaded</p>}
       </div>
-      <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
-      <EditRequestReview application={application} onReviewed={onEditRequestReviewed} />
+      <AdminApplicationEditor application={application} onSaved={onApplicationEdited} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} canApproveFirstCounseling={canApproveFirstCounseling} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{getDocumentLabel(key)}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={getDocumentLabel(key)} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
-      <div className="admin-document-review">
-        <div className="admin-document-review-heading">
-          <div>
-            <span className="admin-review-kicker">Verification</span>
-            <h4>Compare submitted PSA</h4>
-          </div>
-          <span className="admin-review-note">Manual review</span>
-        </div>
-        <div className="admin-document-comparison">
-          <div className="admin-document-preview">
-            {psaDocument && typeof psaDocument[1] === 'string' && psaDocument[1].startsWith('data:image/') ? (
-              <details className="admin-document-disclosure">
-                <summary>View submitted PSA / marriage license</summary>
-                <img src={psaDocument[1]} alt="Submitted PSA marriage license" />
-              </details>
-            ) : (
-              <p>{psaDocument ? 'The submitted PSA is not an image preview.' : 'No PSA image was submitted.'}</p>
-            )}
-          </div>
-          <div className="admin-comparison-details">
-            <h5>Application details</h5>
-            <p><strong>Groom:</strong> {application.groomFullName || 'Not provided'}</p>
-            <p><strong>Groom birth date:</strong> {application.groomDob || 'Not provided'}</p>
-            <p><strong>Bride:</strong> {application.brideFullName || 'Not provided'}</p>
-            <p><strong>Bride birth date:</strong> {application.brideDob || 'Not provided'}</p>
-            <p><strong>Applicant email:</strong> {application.applicantEmail || 'Not provided'}</p>
-          </div>
-        </div>
-      </div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )

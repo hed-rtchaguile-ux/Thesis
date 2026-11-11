@@ -46,6 +46,12 @@ export default function LoginPage() {
           </span>
           <span className="brand-name">WEDRINGS</span>
         </Link>
+        <div className="intro-content">
+          <h1>WEDRINGS:</h1>
+          <p className="intro-description">
+            A Digitalized Marriage License Application System for the Office of the Municipal Civil Registrar of Villaverde, Nueva Vizcaya.
+          </p>
+        </div>
       </section>
 
       <section className="login-panel">

@@ -1,3 +1,5 @@
+import { isHiddenMarriageLicenseDocument } from './documentLabels'
+
 export function formatNotificationDate(value, time = '') {
   if (!value || value === 'To be assigned by office') return 'None'
 
@@ -17,7 +19,7 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
     const notificationReads = application.notificationReads || {}
     const notifications = []
 
-    function addNotification(notificationKey, title, message, editing, action) {
+    function addNotification(notificationKey, title, message, action) {
       const isRead = Boolean(notificationReads[notificationKey])
       if (unreadOnly && isRead) return
       notifications.push({
@@ -26,7 +28,6 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         notificationKey,
         title,
         message,
-        editing,
         action,
         isRead,
       })
@@ -37,22 +38,6 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         'submitted',
         'Application received',
         `We received the marriage license application for ${coupleNames}. You can follow updates in your WedRings account.`,
-        false,
-        'View application',
-      )
-    }
-
-    if (['Pending', 'Approved', 'Rejected'].includes(application.editRequestStatus)) {
-      const requestMessages = {
-        Pending: 'Your request to edit this application is awaiting admin approval.',
-        Approved: 'Your edit request was approved. You can now update your application.',
-        Rejected: 'Your request to edit this application was not approved.',
-      }
-      addNotification(
-        'editRequest',
-        application.editRequestStatus === 'Pending' ? 'Edit request submitted' : `Edit request ${application.editRequestStatus.toLowerCase()}`,
-        requestMessages[application.editRequestStatus],
-        false,
         'View application',
       )
     }
@@ -62,7 +47,6 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         'appointment',
         'Appointment scheduled',
         `Your appointment for ${coupleNames} is scheduled for ${formatNotificationDate(application.appointmentDate, application.appointmentTime)}.`,
-        false,
         'View appointment',
       )
     }
@@ -72,7 +56,6 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         'firstCounselingApproved',
         'First counseling approved',
         `Your first counseling has been approved. Your second counseling is scheduled for ${formatNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
-        false,
         'View counseling appointment',
       )
     }
@@ -82,7 +65,6 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         'secondAppointment',
         'Counseling appointment scheduled',
         `Your second appointment for counseling is set for ${formatNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
-        false,
         'View counseling appointment',
       )
     }
@@ -91,9 +73,8 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       addNotification(
         'rejected',
         'Application needs updating',
-        `Your application for ${coupleNames} was rejected. Please review and update it before submitting again.`,
-        true,
-        'Update application',
+        `Your application for ${coupleNames} was not approved. Please contact the office for assistance.`,
+        'View application',
       )
     }
 
@@ -102,13 +83,12 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         'licenseRelease',
         'Marriage license release',
         `Your marriage license is scheduled for release on ${formatNotificationDate(application.licenseReleaseDate)}.`,
-        false,
         'View release date',
       )
     }
 
     Object.entries(application.documentReviews || {}).forEach(([documentKey, status]) => {
-      if (status !== 'Needs Redo') return
+      if (status !== 'Needs Redo' || isHiddenMarriageLicenseDocument(documentKey)) return
       const notificationKey = `redo-${documentKey}`
       const reviewNote = application.documentReviewNotes?.[documentKey]
       addNotification(
@@ -117,8 +97,7 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
         reviewNote
           ? `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}. Reviewer note: ${reviewNote}`
           : `${formatDocumentName(documentKey)} needs to be replaced for ${coupleNames}.`,
-        true,
-        'Update document',
+        'View document status',
       )
     })
 

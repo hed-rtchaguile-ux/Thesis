@@ -4,11 +4,10 @@ import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
-import DeletionRequestReview from './DeletionRequestReview'
-import EditRequestReview from './EditRequestReview'
+import AdminApplicationEditor from './AdminApplicationEditor'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
-import { getDocumentLabel } from './documentLabels'
+import { getDocumentLabel, isHiddenMarriageLicenseDocument } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark-small.png'
 import './ApplicantDashboard.css'
@@ -137,7 +136,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
 
           {(view === 'dashboard' || view === 'reports') && <ReportCards applications={applications} showDateFilter={view === 'reports'} />}
 
-          {view !== 'appointments' && <div className="summary-grid">
+          {view !== 'appointments' && view !== 'reports' && <div className="summary-grid">
             <article className="summary-card"><div className="card-icon" aria-hidden="true">▣</div><div className="summary-copy"><span>Pending Review</span><strong>{applications.filter((application) => application.status === 'For Review').length}</strong></div></article>
             <article className="summary-card"><div className="card-icon" aria-hidden="true">◫</div><div className="summary-copy"><span>All Applications</span><strong>{applications.length}</strong></div></article>
             <article className="summary-card" id="admin-verified"><div className="card-icon" aria-hidden="true">✓</div><div className="summary-copy"><span>Verified Records</span><strong>{applications.filter((application) => application.status === 'Verified').length}</strong></div></article>
@@ -174,13 +173,11 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                             <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
                               {application.firstCounselingApprovedAt
                                 ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
-                                : '1st Counseling'}
+                                : '1st Appointment'}
                             </small>
                           )}
                         </div>
                       )}
-                      {application.deletionRequestStatus === 'Pending' && <small className="deletion-request-badge">Deletion requested</small>}
-                      {application.editRequestStatus === 'Pending' && <small className="edit-request-badge">Edit requested</small>}
                     </div>
                     {view === 'appointments'
                       ? <div className="admin-appointment-actions">
@@ -204,12 +201,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                       setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
                       setSelectedApplicationDetails(updatedApplication)
                     }}
-                    onDeletionReviewed={(result) => setApplications((currentApplications) => (
-                      result.deleted
-                        ? currentApplications.filter((item) => item._id !== result.applicationId)
-                        : currentApplications.map((item) => item._id === result.application._id ? result.application : item)
-                    ))}
-                    onEditRequestReviewed={(updatedApplication) => {
+                    onApplicationEdited={(updatedApplication) => {
                       setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
                       setSelectedApplicationDetails(updatedApplication)
                     }}
@@ -224,17 +216,16 @@ export default function AdminDashboard({ view = 'dashboard' }) {
   )
 }
 
-function ApplicationDetails({ application, onAppointmentSaved, onDeletionReviewed, onEditRequestReviewed }) {
-  const documents = Object.entries(application.documents || {})
+function ApplicationDetails({ application, onAppointmentSaved, onApplicationEdited }) {
+  const documents = Object.entries(application.documents || {}).filter(([key]) => !isHiddenMarriageLicenseDocument(key))
 
   return (
     <div className="admin-details-panel">
       <div className="admin-details-group"><h4>Groom information</h4><p><strong>Name:</strong> {application.groomFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.groomDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.groomGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.groomCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.groomMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.groomEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Bride information</h4><p><strong>Name:</strong> {application.brideFullName || 'Not provided'}</p><p><strong>Date of birth:</strong> {application.brideDob || 'Not provided'}</p><p><strong>Gender:</strong> {application.brideGender || 'Not provided'}</p><p><strong>Civil status:</strong> {application.brideCivilStatus || 'Not provided'}</p><p><strong>Mobile:</strong> {application.brideMobile || 'Not provided'}</p><p><strong>Email:</strong> {application.brideEmail || 'Not provided'}</p></div>
       <div className="admin-details-group"><h4>Appointment and payment</h4><p><strong>Applicant-selected date:</strong> {getAppointmentDate(application) || 'Not selected'}</p><p><strong>Applicant-selected time:</strong> {getAppointmentTime(application) || 'Not selected'}</p><p><strong>Location:</strong> {application.appointmentLocation || 'Not provided'}</p><p><strong>Payment:</strong> {application.paymentMethod || 'Not provided'}</p><p><strong>Amount:</strong> {application.paymentAmount || 'Not provided'}</p><p><strong>Status:</strong> {application.status || 'For Review'}</p>{application.paymentReceipt ? <details className="admin-document-disclosure"><summary>Over-the-counter payment receipt</summary><DocumentPreview label="Payment receipt" value={application.paymentReceipt} /></details> : <p><strong>Over-the-counter payment receipt:</strong> Not uploaded</p>}</div>
-      <DeletionRequestReview application={application} onReviewed={onDeletionReviewed} />
-      <EditRequestReview application={application} onReviewed={onEditRequestReviewed} />
-      <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} />
+      <AdminApplicationEditor application={application} onSaved={onApplicationEdited} />
+      <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} canApproveFirstCounseling />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
         <div className="admin-details-group admin-submitted-documents"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-submitted-document admin-document-disclosure" key={key}><summary>{getDocumentLabel(key)}</summary><DocumentPreview label={getDocumentLabel(key)} value={value} /></details>) : <p>No documents listed.</p>}</div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>

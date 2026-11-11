@@ -64,24 +64,24 @@ export default function SecondAppointmentControl({ application, onSaved, canAppr
   }
 
   return (
-    <section className="admin-second-appointment" aria-label="First counseling approval and second appointment">
+    <section className="admin-second-appointment" aria-label="First appointment approval and second counseling">
       <div className="admin-second-appointment-heading">
-        <h4>1st counseling approval · 2nd counseling</h4>
+        <h4>1st appointment · 2nd counseling</h4>
         {application.firstCounselingApprovedAt && <span>Approved</span>}
       </div>
       {!firstDate
-        ? <p>Set the first appointment date before approving the first counseling.</p>
+        ? <p>Set the first appointment date before approving it.</p>
         : application.firstCounselingApprovedAt
           ? <p>Second counseling: {application.secondAppointmentDate} at {application.secondAppointmentTime}. An email reminder is scheduled for three days before.</p>
           : !firstAppointmentPassed
             ? <p>Approval is available after the first appointment ({firstDate}{getAppointmentTime(application) ? ` at ${getAppointmentTime(application)}` : ''}) has passed.</p>
             : canApproveFirstCounseling
               ? <form onSubmit={approveFirstCounseling}>
-                <p className="admin-second-appointment-note">Approving confirms the first counseling and automatically schedules the second on the next last Wednesday of the month.</p>
+                <p className="admin-second-appointment-note">Approving confirms the first appointment and automatically schedules the second counseling on the next last Wednesday of the month.</p>
                 <label>2nd counseling time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
-                <button type="submit" disabled={!time || saving}>{saving ? 'Approving...' : 'Approve 1st Counseling & Schedule 2nd'}</button>
+                <button type="submit" disabled={!time || saving}>{saving ? 'Approving...' : 'Approve 1st Appointment & Schedule 2nd Counseling'}</button>
               </form>
-              : <p>Waiting for Super Admin to approve the first counseling.</p>}
+              : <p>Waiting for an admin to approve the first appointment.</p>}
       {error && <p className="admin-appointment-error" role="alert">{error}</p>}
       {message && <p className="admin-second-appointment-success" role="status">{message}</p>}
     </section>

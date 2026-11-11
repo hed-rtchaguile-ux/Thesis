@@ -67,7 +67,6 @@ const documentFields = {
     { key: 'birthCertificateGroom', label: 'PSA Birth Certificate (Groom) *' },
     { key: 'certificateOfNoMarriageGroom', label: 'CENOMAR (Groom) *' },
     { key: 'validIdGroom', label: 'Valid ID (Groom) *' },
-    { key: 'psaMarriageLicenseGroom', label: 'PSA Marriage License (Groom, if applicable)' },
     { key: 'barangayClearanceGroom', label: 'Barangay Clearance / Residency (Groom) *' },
     { key: 'additionalRequirementGroom', label: 'Additional Requirement / Affidavit (Groom)' },
   ],
@@ -75,7 +74,6 @@ const documentFields = {
     { key: 'birthCertificateBride', label: 'PSA Birth Certificate (Bride) *' },
     { key: 'certificateOfNoMarriageBride', label: 'CENOMAR (Bride) *' },
     { key: 'validIdBride', label: 'Valid ID (Bride) *' },
-    { key: 'psaMarriageLicenseBride', label: 'PSA Marriage License (Bride, if applicable)' },
     { key: 'barangayClearanceBride', label: 'Barangay Clearance / Residency (Bride) *' },
     { key: 'additionalRequirementBride', label: 'Additional Requirement / Affidavit (Bride)' },
   ],
@@ -366,6 +364,17 @@ function getLocalDateInputValue() {
   const now = new Date()
   const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
   return localDate.toISOString().slice(0, 10)
+}
+
+function isValidPastOrPresentDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)
+    || year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return false
+  const parsedDate = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsedDate.getTime())
+    && parsedDate.toISOString().slice(0, 10) === value
+    && value <= getLocalDateInputValue()
 }
 
 function getSampleApplicantFields(prefix, details) {
@@ -1060,6 +1069,7 @@ export default function ApplicantRegistration() {
       [`${prefix}DissolutionMonth`]: month,
       [`${prefix}DissolutionYear`]: year,
     }))
+    setValidationErrors((currentErrors) => ({ ...currentErrors, [`${prefix}DissolutionDate`]: '' }))
   }
 
   function nextStep() {
@@ -1143,12 +1153,18 @@ export default function ApplicantRegistration() {
 
       if (!form[`${prefix}CivilStatus`]) errors[`${prefix}CivilStatus`] = 'Select a civil status.'
       if (!/^09\d{9}$/.test(mobile)) errors[`${prefix}Mobile`] = 'Enter an 11-digit mobile number starting with 09.'
-      if (!emailPattern.test(email)) errors[`${prefix}Email`] = 'Enter a valid email address.'
+      if (email.toLowerCase() !== 'n/a' && !emailPattern.test(email)) {
+        errors[`${prefix}Email`] = 'Enter a valid email address or N/A if unavailable.'
+      }
       validateLocationFields(errors, form, `${prefix}Residence`, true)
     }
 
     if (currentPersonStep === 4 && form[`${prefix}PreviouslyMarried`] === 'Yes') {
       validateLocationFields(errors, form, `${prefix}Dissolution`, true)
+      const dissolutionDate = getDissolutionDateInputValue(prefix)
+      if (!isValidPastOrPresentDate(dissolutionDate)) {
+        errors[`${prefix}DissolutionDate`] = 'Enter a valid date that is not in the future.'
+      }
     }
 
     if (currentPersonStep === 4 && !form[`${prefix}PreviouslyMarried`]) {
@@ -1541,12 +1557,12 @@ export default function ApplicantRegistration() {
             </div>
 
             <div className="field-group single-line-field">
-              <label>Email Address *</label>
+              <label>Email Address (enter N/A if unavailable) *</label>
               <input
                 value={form[emailField]}
                 onChange={(e) => updateField(emailField, e.target.value)}
-                placeholder="you@example.com"
-                type="email"
+                placeholder="you@example.com or N/A"
+                type="text"
               />
               <FieldError message={validationErrors[emailField]} />
             </div>
@@ -1604,8 +1620,10 @@ export default function ApplicantRegistration() {
                     type="date"
                     value={getDissolutionDateInputValue(person)}
                     max={getLocalDateInputValue()}
+                    required
                     onChange={(event) => updateDissolutionDate(person, event.target.value)}
                   />
+                  <FieldError message={validationErrors[`${person}DissolutionDate`]} />
                 </div>
               </>
             )}
