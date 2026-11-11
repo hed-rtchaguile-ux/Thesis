@@ -337,6 +337,13 @@
   color: #7e1d1d;
 }
 
+.admin-account-menu-error {
+  margin: 4px 8px 8px;
+  color: #9b4a4a;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .mini-button {
   border: 0;
   background: transparent;
@@ -749,7 +756,8 @@
 
 .admin-application-editor {
   width: 100%;
-  max-width: 430px;
+  max-width: none;
+  grid-column: 1 / -1;
   box-sizing: border-box;
   margin: 12px 0;
   padding: 12px;
@@ -2041,6 +2049,66 @@
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+}
+
+.admin-audit-modal {
+  width: min(100%, 1100px);
+}
+
+.admin-audit-description {
+  margin: 7px 0 0;
+  color: #697795;
+  font-size: 12px;
+}
+
+.admin-audit-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(125, 136, 168, 0.18);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-audit-table th,
+.admin-audit-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(125, 136, 168, 0.14);
+  color: #46516d;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.admin-audit-table th {
+  color: #53689f;
+  background: #f7f8fc;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.admin-audit-table td:first-child {
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+.admin-audit-table td strong,
+.admin-audit-table td small {
+  display: block;
+}
+
+.admin-audit-table td small {
+  margin-top: 4px;
+  color: #697795;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.admin-audit-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .admin-print-actions {

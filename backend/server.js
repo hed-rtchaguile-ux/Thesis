@@ -103,6 +103,19 @@ const ApplicantAccount = mongoose.model('ApplicantAccount', accountSchema, 'appl
 const AdminAccount = mongoose.model('AdminAccount', accountSchema, 'admin_accounts');
 const SuperAdminAccount = mongoose.model('SuperAdminAccount', accountSchema, 'superadmin_accounts');
 const accountModels = { applicant: ApplicantAccount, admin: AdminAccount, superadmin: SuperAdminAccount };
+const auditLogSchema = new mongoose.Schema({
+  actorId: { type: String, required: true },
+  actorName: { type: String, required: true },
+  actorEmail: { type: String, required: true },
+  actorRole: { type: String, required: true, enum: ['admin', 'superadmin'] },
+  action: { type: String, required: true },
+  targetType: { type: String, required: true },
+  targetId: String,
+  targetLabel: String,
+  details: { type: mongoose.Schema.Types.Mixed, default: {} },
+}, { timestamps: { createdAt: true, updatedAt: false } });
+auditLogSchema.index({ createdAt: -1 });
+const AuditLog = mongoose.model('AuditLog', auditLogSchema, 'audit_logs');
 // Applying the CORS options const
 const corsOptions = {
   origin: ALLOWED_FRONTEND_ORIGIN,
@@ -231,6 +244,73 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+app.get('/api/admin/audit-logs', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    if (isDatabaseUnavailable(res, 'Audit history')) return;
+    const auditLogs = await AuditLog.find()
+      .select('actorName actorEmail actorRole action targetType targetId targetLabel details createdAt')
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    res.set('Cache-Control', 'no-store');
+    res.json(auditLogs);
+  } catch (error) {
+    console.error('Unable to load admin audit history:', error.message);
+    res.status(500).json({ message: 'Unable to load audit history.' });
+  }
+});
+
+app.get('/api/admin/database-backup', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    if (isDatabaseUnavailable(res, 'Database backup')) return;
+    const database = mongoose.connection.db;
+    const collections = await database.listCollections({}, { nameOnly: true }).toArray();
+    const backupCollections = {};
+    const accountCredentialFields = {
+      passwordHash: 0,
+      passwordResetTokenHash: 0,
+      passwordResetExpiresAt: 0,
+      passwordResetCodeHash: 0,
+      passwordResetCodeAttempts: 0,
+    };
+
+    for (const { name } of collections.filter(({ name }) => !name.startsWith('system.'))) {
+      const projection = name.endsWith('_accounts') ? accountCredentialFields : undefined;
+      backupCollections[name] = await database.collection(name).find({}, { projection }).toArray();
+    }
+
+    const exportedAt = new Date();
+    const fileTimestamp = exportedAt.toISOString().replace(/[:.]/g, '-');
+    const backup = {
+      format: 'wedrings-mongodb-extended-json-backup',
+      version: 1,
+      database: database.databaseName,
+      exportedAt: exportedAt.toISOString(),
+      excludedAccountFields: Object.keys(accountCredentialFields),
+      collections: backupCollections,
+    };
+    const serializedBackup = mongoose.mongo.BSON.EJSON.stringify(backup, null, 2, { relaxed: false });
+    await recordAdminAction(req, {
+      action: 'database.backup.downloaded',
+      targetType: 'database',
+      targetLabel: database.databaseName,
+      details: { collectionCount: Object.keys(backupCollections).length },
+    });
+    res.set({
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="wedrings-database-backup-${fileTimestamp}.json"`,
+    });
+    res.send(serializedBackup);
+  } catch (error) {
+    if (error.code === 'AUDIT_LOG_FAILED') {
+      return res.status(500).json({ message: error.message });
+    }
+    console.error('Unable to create database backup:', error.message);
+    res.status(500).json({ message: 'Unable to create database backup.' });
+  }
+});
+
 function isRateLimited(requestWindows, key, limit, windowMilliseconds) {
   const now = Date.now();
   for (const [requestKey, window] of requestWindows) {
@@ -261,6 +341,31 @@ function isDatabaseUnavailable(res, action) {
 
 function getCoupleNames(application) {
   return [application.groomFullName, application.brideFullName].filter(Boolean).join(' & ') || 'your application';
+}
+
+async function recordAdminAction(req, action) {
+  try {
+    await AuditLog.create({
+      actorId: req.user.id,
+      actorName: req.user.name,
+      actorEmail: req.user.email,
+      actorRole: req.user.role,
+      ...action,
+    });
+  } catch (error) {
+    console.error('Unable to record admin audit action:', error.message);
+    const auditError = new Error('The change was saved, but its audit record could not be recorded.');
+    auditError.code = 'AUDIT_LOG_FAILED';
+    throw auditError;
+  }
+}
+
+function respondToAdminMutationError(res, error, message) {
+  if (error.code === 'AUDIT_LOG_FAILED') {
+    return res.status(500).json({ message: error.message });
+  }
+  console.error(`${message}:`, error.message);
+  return res.status(400).json({ message });
 }
 
 function formatApplicantNotificationDate(value, time = '') {
@@ -1268,11 +1373,17 @@ app.put('/api/applications/:id/admin-information', requireRoles(['admin', 'super
     ).lean();
     if (!application) return res.status(404).json({ message: 'Application not found.' });
 
+    await recordAdminAction(req, {
+      action: 'application.information.updated',
+      targetType: 'application',
+      targetId: application._id.toString(),
+      targetLabel: getCoupleNames(application),
+      details: { fields: entries.map(([key]) => key) },
+    });
     res.set('Cache-Control', 'no-store');
     res.json(application);
   } catch (error) {
-    console.error('Unable to update applicant information:', error.message);
-    res.status(400).json({ message: 'Unable to update applicant information.' });
+    respondToAdminMutationError(res, error, 'Unable to update applicant information.');
   }
 });
 
@@ -1283,6 +1394,13 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: 'Invalid application status.' });
+    }
+
+    const existingApplication = await Application.findById(req.params.id)
+      .select('status')
+      .lean();
+    if (!existingApplication) {
+      return res.status(404).json({ message: 'Application not found.' });
     }
 
     const statusUpdate = { $set: { status } };
@@ -1298,6 +1416,14 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
       return res.status(404).json({ message: 'Application not found.' });
     }
 
+    await recordAdminAction(req, {
+      action: 'application.status.updated',
+      targetType: 'application',
+      targetId: application._id.toString(),
+      targetLabel: getCoupleNames(application),
+      details: { previousStatus: existingApplication.status, status },
+    });
+
     if (status === 'Rejected') {
       const coupleNames = getCoupleNames(application);
       const notificationDelivery = await sendApplicantNotification(
@@ -1311,7 +1437,7 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
 
     res.json(application);
   } catch (error) {
-    res.status(400).json({ message: 'Unable to update application status.', error: error.message });
+    respondToAdminMutationError(res, error, 'Unable to update application status.');
   }
 });
 
@@ -1357,6 +1483,16 @@ app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin',
       { new: true, runValidators: true },
     ).lean();
     if (!updatedApplication) return res.status(409).json({ message: 'The first counseling has already been approved.' });
+    await recordAdminAction(req, {
+      action: 'appointment.first.approved',
+      targetType: 'application',
+      targetId: updatedApplication._id.toString(),
+      targetLabel: getCoupleNames(updatedApplication),
+      details: {
+        secondAppointmentDate: updatedApplication.secondAppointmentDate,
+        secondAppointmentTime: updatedApplication.secondAppointmentTime,
+      },
+    });
     const coupleNames = getCoupleNames(updatedApplication);
     const firstCounselingNotification = await sendApplicantNotification(
       updatedApplication,
@@ -1378,7 +1514,7 @@ app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin',
       },
     });
   } catch (error) {
-    res.status(400).json({ message: 'Unable to approve the first counseling and schedule the second counseling.', error: error.message });
+    respondToAdminMutationError(res, error, 'Unable to approve the first counseling and schedule the second counseling.');
   }
 });
 
@@ -1412,6 +1548,16 @@ app.put('/api/applications/:id/second-appointment', requireRoles(['superadmin'])
       { new: true, runValidators: true },
     ).lean();
     if (!updatedApplication) return res.status(404).json({ message: 'Application not found.' });
+    await recordAdminAction(req, {
+      action: 'appointment.second.updated',
+      targetType: 'application',
+      targetId: updatedApplication._id.toString(),
+      targetLabel: getCoupleNames(updatedApplication),
+      details: {
+        secondAppointmentDate: updatedApplication.secondAppointmentDate,
+        secondAppointmentTime: updatedApplication.secondAppointmentTime,
+      },
+    });
     const notificationDelivery = await sendApplicantNotification(
       updatedApplication,
       'Second counseling appointment updated',
@@ -1420,7 +1566,7 @@ app.put('/api/applications/:id/second-appointment', requireRoles(['superadmin'])
     );
     res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
-    res.status(400).json({ message: 'Unable to update the second counseling time.', error: error.message });
+    respondToAdminMutationError(res, error, 'Unable to update the second counseling time.');
   }
 });
 
@@ -1444,6 +1590,13 @@ app.put('/api/applications/:id/license-release-date', requireRoles(['admin', 'su
     application.set('notificationReads.licenseRelease', undefined);
     await application.save();
     const updatedApplication = application.toObject();
+    await recordAdminAction(req, {
+      action: 'license.release-date.updated',
+      targetType: 'application',
+      targetId: application._id.toString(),
+      targetLabel: getCoupleNames(updatedApplication),
+      details: { releaseDate },
+    });
     const notificationDelivery = await sendApplicantNotification(
       updatedApplication,
       'Marriage license release',
@@ -1452,7 +1605,7 @@ app.put('/api/applications/:id/license-release-date', requireRoles(['admin', 'su
     );
     res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
-    res.status(400).json({ message: 'Unable to set the license release date.', error: error.message });
+    respondToAdminMutationError(res, error, 'Unable to set the license release date.');
   }
 });
 
@@ -1493,6 +1646,14 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
       return res.status(404).json({ message: 'Application not found.' });
     }
 
+    await recordAdminAction(req, {
+      action: 'document.review.updated',
+      targetType: 'application',
+      targetId: application._id.toString(),
+      targetLabel: getCoupleNames(application),
+      details: { documentKey: req.params.documentKey, reviewStatus },
+    });
+
     if (reviewStatus === 'Needs Redo') {
       const documentName = req.params.documentKey.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
       const coupleNames = getCoupleNames(application);
@@ -1510,7 +1671,7 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
 
     res.json(application);
   } catch (error) {
-    res.status(400).json({ message: 'Unable to update document review.', error: error.message });
+    respondToAdminMutationError(res, error, 'Unable to update document review.');
   }
 });
 

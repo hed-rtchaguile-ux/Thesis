@@ -5,6 +5,7 @@ import DocumentPreview from './DocumentPreview'
 import LicenseReleaseControl from './LicenseReleaseControl'
 import SecondAppointmentControl from './SecondAppointmentControl'
 import AdminApplicationEditor from './AdminApplicationEditor'
+import AdminAccountMenu from './AdminAccountMenu'
 import { ReportCards } from './AdminTools'
 import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
 import { getDocumentLabel, isHiddenMarriageLicenseDocument } from './documentLabels'
@@ -24,14 +25,12 @@ function getAppointmentDateKey(value) {
 }
 
 export default function SuperAdminDashboard({ isAdmin = false }) {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const basePath = isAdmin ? '/admin' : '/superadmin'
   const displayName = user?.name || 'User'
   const firstName = displayName.split(' ')[0]
-  const initials = displayName.split(' ').map((namePart) => namePart[0]).join('').slice(0, 2).toUpperCase()
   const [applications, setApplications] = useState([])
   const [updatingId, setUpdatingId] = useState('')
   const [selectedApplicationId, setSelectedApplicationId] = useState('')
@@ -181,48 +180,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
             <p>{isAdmin ? 'Review documents and schedule appointments for applicants.' : 'Final approval and system-wide oversight for all applications.'}</p>
           </div>
 
-          <div className="topbar-user">
-            <div className="user-menu-wrapper">
-              <button
-                type="button"
-                className="admin-account-trigger"
-                aria-label={`Open account menu for ${displayName}`}
-                aria-expanded={accountMenuOpen}
-                onClick={() => setAccountMenuOpen((open) => !open)}
-              >
-                <span className="user-avatar">{initials}</span>
-                <span>{displayName}</span>
-                <span className="admin-user-caret" aria-hidden="true">▾</span>
-              </button>
-              {accountMenuOpen && (
-                <div className="user-dropdown" role="menu" aria-label="Account actions">
-                  <button
-                    type="button"
-                    className="dropdown-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setAccountMenuOpen(false)
-                      navigate(`${basePath}/profile`)
-                    }}
-                  >
-                    Profile
-                  </button>
-                  <button
-                    type="button"
-                    className="dropdown-item danger"
-                    role="menuitem"
-                    onClick={() => {
-                      setAccountMenuOpen(false)
-                      logout()
-                      navigate('/login', { replace: true })
-                    }}
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <div className="topbar-user"><AdminAccountMenu basePath={basePath} displayName={displayName} /></div>
         </header>
 
         <div className="dashboard-panel admin-dashboard-panel">
