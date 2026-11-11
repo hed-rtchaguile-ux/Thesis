@@ -325,7 +325,9 @@
   }
 
   .login-page-shell .login-intro {
-    min-height: 120px;
+    min-height: 0;
+    justify-content: flex-start;
+    gap: 24px;
     padding: 18px 24px;
   }
 
@@ -344,12 +346,23 @@
   }
 
   .intro-content {
-    margin-top: 42px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     padding: 0;
   }
 
+  .login-page-shell .login-intro h1 {
+    font-size: clamp(30px, 8vw, 42px);
+  }
+
   .intro-description {
-    font-size: 16px;
+    display: block;
+    max-width: 100%;
+    margin: 10px 0 0;
+    font-size: clamp(14px, 4vw, 16px);
+    line-height: 1.5;
+    overflow-wrap: break-word;
   }
 
   .ring-art {
