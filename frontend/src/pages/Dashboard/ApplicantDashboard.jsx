@@ -37,8 +37,6 @@ export default function ApplicantDashboard() {
   const [receiptUploads, setReceiptUploads] = useState({})
   const [receiptErrors, setReceiptErrors] = useState({})
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState({})
-  const [deletionRequests, setDeletionRequests] = useState({})
-  const [deletionRequestErrors, setDeletionRequestErrors] = useState({})
   const handledNotificationRef = useRef('')
 
   function getFlaggedDocuments(applicationRecord) {
@@ -124,28 +122,6 @@ export default function ApplicantDashboard() {
   const handleLogout = () => {
     logout()
     navigate('/login')
-  }
-
-  async function requestApplicationDeletion(applicationRecord) {
-    if (!window.confirm('Request deletion of this application? It will remain active until an admin approves the request.')) return
-
-    setDeletionRequests((current) => ({ ...current, [applicationRecord._id]: true }))
-    setDeletionRequestErrors((current) => ({ ...current, [applicationRecord._id]: '' }))
-    try {
-      const response = await apiFetch(`/api/applications/${applicationRecord._id}/deletion-request`, {
-        method: 'POST',
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Unable to request application deletion.')
-      setApplications((current) => current.map((item) => item._id === result._id ? result : item))
-    } catch (error) {
-      setDeletionRequestErrors((current) => ({
-        ...current,
-        [applicationRecord._id]: error.message || 'Unable to request application deletion.',
-      }))
-    } finally {
-      setDeletionRequests((current) => ({ ...current, [applicationRecord._id]: false }))
-    }
   }
 
   const getEditableApplicationData = useCallback((applicationRecord) => {
@@ -672,7 +648,6 @@ export default function ApplicantDashboard() {
     && field !== 'paymentAmount'
   ))
   const canEditApplication = selectedApplication?.editRequestStatus === 'Approved'
-    && selectedApplication.deletionRequestStatus !== 'Pending'
 
   function getPersonAge(person) {
     const savedAge = Number(selectedApplication.applicationData?.[`${person}Age`])
@@ -838,12 +813,6 @@ export default function ApplicantDashboard() {
                         <span className="application-label">Status</span>
                         <strong>{item.status || 'For Review'}</strong>
                       </div>
-                      {item.deletionRequestStatus && (
-                        <div>
-                          <span className="application-label">Deletion request</span>
-                          <strong>{item.deletionRequestStatus === 'Pending' ? 'Awaiting admin approval' : 'Not approved'}</strong>
-                        </div>
-                      )}
                       <div>
                         <span className="application-label">Appointment</span>
                         <strong>{formatNotificationDate(item.appointmentDate, item.appointmentTime)}</strong>
@@ -914,23 +883,6 @@ export default function ApplicantDashboard() {
                                   ? 'Edit request not approved'
                                   : 'Previous edit completed'}
                           </span>
-                        )}
-                        <button
-                          type="button"
-                          className="application-deletion-request-button"
-                          onClick={() => void requestApplicationDeletion(item)}
-                          disabled={Boolean(deletionRequests[item._id]) || item.deletionRequestStatus === 'Pending'}
-                        >
-                          {deletionRequests[item._id]
-                            ? 'Sending request...'
-                            : item.deletionRequestStatus === 'Pending'
-                              ? 'Deletion request pending'
-                              : item.deletionRequestStatus === 'Rejected'
-                                ? 'Request deletion again'
-                                : 'Request deletion'}
-                        </button>
-                        {deletionRequestErrors[item._id] && (
-                          <p className="application-deletion-request-error" role="alert">{deletionRequestErrors[item._id]}</p>
                         )}
                       </div>
                     </div>
@@ -1109,8 +1061,6 @@ export default function ApplicantDashboard() {
                     <p>Your edit request is awaiting admin review.</p>
                     <p><strong>Requested change:</strong> {selectedApplication.editRequestComment}</p>
                   </>
-                ) : selectedApplication.deletionRequestStatus === 'Pending' ? (
-                  <p>Editing is unavailable while a deletion request is pending.</p>
                 ) : (
                   <form onSubmit={requestApplicationEdit}>
                     {selectedApplication.editRequestStatus === 'Rejected' && (
