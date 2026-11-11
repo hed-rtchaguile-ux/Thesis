@@ -183,6 +183,11 @@
   padding-right: 48px;
 }
 
+.password-wrap input::-ms-reveal,
+.password-wrap input::-ms-clear {
+  display: none;
+}
+
 .login-form .password-toggle {
   position: absolute;
   z-index: 1;

@@ -966,6 +966,15 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
           message: `Enter a valid marriage dissolution date for the ${person}.`,
         });
       }
+      if (submittedApplicationData[`${person}PreviouslyMarried`] === 'Yes'
+        && submittedApplicationData[`${person}DissolutionMethod`] === 'Other'
+        && (typeof submittedApplicationData[`${person}DissolutionMethodOther`] !== 'string'
+          || !submittedApplicationData[`${person}DissolutionMethodOther`].trim()
+          || submittedApplicationData[`${person}DissolutionMethodOther`].length > 200)) {
+        return res.status(400).json({
+          message: `Describe how the marriage was dissolved for the ${person} (200 characters or fewer).`,
+        });
+      }
     }
 
     // Applicants submit a preferred date/time, while the office assigns the
@@ -1204,6 +1213,15 @@ app.put('/api/applications/:id/admin-information', requireRoles(['admin', 'super
         && !isValidMarriageDissolutionDate(updatedData, person)) {
         return res.status(400).json({
           message: `Enter a valid marriage dissolution date for the ${person}.`,
+        });
+      }
+      if (updatedData[`${person}PreviouslyMarried`] === 'Yes'
+        && updatedData[`${person}DissolutionMethod`] === 'Other'
+        && (typeof updatedData[`${person}DissolutionMethodOther`] !== 'string'
+          || !updatedData[`${person}DissolutionMethodOther`].trim()
+          || updatedData[`${person}DissolutionMethodOther`].length > 200)) {
+        return res.status(400).json({
+          message: `Describe how the marriage was dissolved for the ${person} (200 characters or fewer).`,
         });
       }
       const dateKeys = ['DobMonth', 'DobDay', 'DobYear'].map((part) => `${person}${part}`);

@@ -266,6 +266,7 @@ const initialForm = {
   groomAdvisorResidenceCountry: '',
   groomPreviouslyMarried: '',
   groomDissolutionMethod: '',
+  groomDissolutionMethodOther: '',
   groomDissolutionCity: '',
   groomDissolutionProvince: '',
   groomDissolutionCountry: '',
@@ -338,6 +339,7 @@ const initialForm = {
   brideAdvisorResidenceCountry: '',
   bridePreviouslyMarried: '',
   brideDissolutionMethod: '',
+  brideDissolutionMethodOther: '',
   brideDissolutionCity: '',
   brideDissolutionProvince: '',
   brideDissolutionCountry: '',
@@ -435,6 +437,7 @@ function getSampleApplicantFields(prefix, details) {
     ...relativeResidence('Advisor'),
     [`${prefix}PreviouslyMarried`]: 'No',
     [`${prefix}DissolutionMethod`]: '',
+    [`${prefix}DissolutionMethodOther`]: '',
     [`${prefix}DissolutionPlace`]: '',
     [`${prefix}DissolutionDate`]: '',
     [`${prefix}DissolutionCity`]: '',
@@ -819,13 +822,16 @@ export default function ApplicantRegistration() {
         ...current,
         [field]: value,
         ...(field === 'appointmentDate' && current.appointmentDate !== value ? { appointmentTime: '' } : {}),
+        ...(/^(groom|bride)DissolutionMethod$/.test(field) && value !== 'Other'
+          ? { [`${field.slice(0, -'DissolutionMethod'.length)}DissolutionMethodOther`]: '' }
+          : {}),
       }
       dependentLocationFields.forEach((dependentField) => {
         nextForm[dependentField] = ''
       })
 
       if (previouslyMarriedField && value === 'No') {
-        const dissolutionFields = ['DissolutionMethod', 'DissolutionPlace', 'DissolutionDate', 'DissolutionCity', 'DissolutionProvince', 'DissolutionCountry', 'DissolutionDay', 'DissolutionMonth', 'DissolutionYear']
+        const dissolutionFields = ['DissolutionMethod', 'DissolutionMethodOther', 'DissolutionPlace', 'DissolutionDate', 'DissolutionCity', 'DissolutionProvince', 'DissolutionCountry', 'DissolutionDay', 'DissolutionMonth', 'DissolutionYear']
         dissolutionFields.forEach((suffix) => {
           nextForm[`${previouslyMarriedField[1]}${suffix}`] = ''
         })
@@ -1160,6 +1166,10 @@ export default function ApplicantRegistration() {
     }
 
     if (currentPersonStep === 4 && form[`${prefix}PreviouslyMarried`] === 'Yes') {
+      if (form[`${prefix}DissolutionMethod`] === 'Other'
+        && !String(form[`${prefix}DissolutionMethodOther`] || '').trim()) {
+        errors[`${prefix}DissolutionMethodOther`] = 'Describe how the marriage was dissolved.'
+      }
       validateLocationFields(errors, form, `${prefix}Dissolution`, true)
       const dissolutionDate = getDissolutionDateInputValue(prefix)
       if (!isValidPastOrPresentDate(dissolutionDate)) {
@@ -1604,8 +1614,25 @@ export default function ApplicantRegistration() {
                     <option value="Divorce">Divorce</option>
                     <option value="Annulment">Annulment</option>
                     <option value="Legal separation">Legal separation</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
+
+                {form[`${person}DissolutionMethod`] === 'Other' && (
+                  <div className="field-group single-line-field" style={{ marginTop: '12px' }}>
+                    <label htmlFor={`${person}-dissolution-method-other`}>Please specify</label>
+                    <input
+                      id={`${person}-dissolution-method-other`}
+                      value={form[`${person}DissolutionMethodOther`] ?? ''}
+                      onChange={(event) => updateField(`${person}DissolutionMethodOther`, event.target.value)}
+                      placeholder="Describe how it was dissolved"
+                      maxLength={200}
+                      required
+                      aria-invalid={Boolean(validationErrors[`${person}DissolutionMethodOther`])}
+                    />
+                    <FieldError message={validationErrors[`${person}DissolutionMethodOther`]} />
+                  </div>
+                )}
 
                 <div className="form-grid three-col" style={{ marginTop: '12px' }}>
                   {renderDropdownField(`${person}DissolutionCountry`, 'Country', 'country')}
