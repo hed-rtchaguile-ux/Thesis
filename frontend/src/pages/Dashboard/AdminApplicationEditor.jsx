@@ -1,6 +1,38 @@
 import { useState } from 'react'
 import { apiFetch } from '../auth'
 
+const citizenshipOptions = [
+  'Filipino',
+  'American',
+  'Australian',
+  'British',
+  'Canadian',
+  'Chinese',
+  'French',
+  'German',
+  'Indian',
+  'Indonesian',
+  'Italian',
+  'Japanese',
+  'Korean',
+  'Malaysian',
+  'Singaporean',
+  'Spanish',
+  'Thai',
+  'Vietnamese',
+]
+
+const editorSections = [
+  { title: 'Name', matches: (key) => /^(FirstName|MiddleName|LastName|Suffix|FullName)$/.test(key) },
+  { title: 'Birth details', matches: (key) => /^(Dob|DobDay|DobMonth|DobYear|Gender|BirthPlace.*|PlaceOfBirth)$/.test(key) },
+  { title: 'Residence & contact', matches: (key) => /^(Citizenship|Religion|CivilStatus|Mobile|Email|Residence.*)$/.test(key) },
+  { title: 'Marital history', matches: (key) => /^(PreviouslyMarried|Dissolution.*|DegreeRelationship|DateOfMarriage)$/.test(key) },
+  { title: "Father's details", matches: (key) => key.startsWith('Father') },
+  { title: "Mother's details", matches: (key) => key.startsWith('Mother') },
+  { title: 'Person who gave advice', matches: (key) => key.startsWith('Advisor') },
+  { title: 'Other information', matches: () => true },
+]
+
 function getApplicantFields(application) {
   const data = application.applicationData && typeof application.applicationData === 'object'
     ? application.applicationData
@@ -45,6 +77,25 @@ function formatFieldLabel(key) {
     .replace(/^./, (letter) => letter.toUpperCase())
 }
 
+function getSectionFields(fields, person, section) {
+  const remainingFields = fields.filter((key) => !editorSections
+    .slice(0, editorSections.indexOf(section))
+    .some((previousSection) => previousSection.matches(key)))
+  return remainingFields.filter((key) => section.matches(key))
+    .map((key) => [key, key.replace(new RegExp(`^${person}`, 'i'), '')])
+}
+
+function getFieldOptions(key) {
+  const suffix = key.replace(/^(groom|bride)/, '')
+  if (suffix === 'Suffix') return ['Jr.', 'Sr.', 'III']
+  if (suffix === 'Gender') return ['Male', 'Female']
+  if (suffix === 'CivilStatus') return ['Single', 'Divorced', 'Widowed', 'Separated']
+  if (suffix === 'PreviouslyMarried') return ['Yes', 'No']
+  if (suffix === 'DissolutionMethod') return ['Death of spouse', 'Divorce', 'Annulment', 'Legal separation', 'Other']
+  if (suffix === 'Citizenship') return citizenshipOptions
+  return null
+}
+
 export default function AdminApplicationEditor({ application, onSaved }) {
   const [values, setValues] = useState(() => getApplicantFields(application))
   const [isEditing, setIsEditing] = useState(false)
@@ -80,24 +131,61 @@ export default function AdminApplicationEditor({ application, onSaved }) {
       <summary>Edit applicant information</summary>
       {isEditing ? (
         <form className="admin-application-editor-form" onSubmit={saveApplicantInformation}>
-          {Object.entries(values).map(([key, value]) => (
-            <label key={key}>
-              {formatFieldLabel(key)}
-              {key.endsWith('Declaration') ? (
-                <textarea
-                  rows="3"
-                  value={value}
-                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                />
-              )}
-            </label>
-          ))}
+          {['groom', 'bride'].map((person) => {
+            const personFields = Object.keys(values).filter((key) => key.startsWith(person))
+            if (personFields.length === 0) return null
+
+            return (
+              <details className="admin-application-editor-person" key={person}>
+                <summary>{person === 'groom' ? 'Groom information' : 'Bride information'}</summary>
+                {editorSections.map((section) => {
+                  const sectionFields = getSectionFields(personFields, person, section)
+                  if (sectionFields.length === 0) return null
+
+                  return (
+                    <details className="admin-application-editor-section" key={section.title}>
+                      <summary>{section.title}</summary>
+                      <div className="admin-application-editor-fields">
+                        {sectionFields.map(([key, fieldName]) => {
+                          const value = values[key]
+                          const options = getFieldOptions(key)
+                          const choices = options && value && !options.includes(value)
+                            ? [...options, value]
+                            : options
+                          return (
+                            <label key={key}>
+                              {formatFieldLabel(fieldName)}
+                              {choices ? (
+                                <select
+                                  value={value}
+                                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                                >
+                                  <option value="">Select</option>
+                                  {choices.map((option) => <option key={option} value={option}>{option}</option>)}
+                                </select>
+                              ) : fieldName.endsWith('Declaration') ? (
+                                <textarea
+                                  rows="3"
+                                  value={value}
+                                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                                />
+                              )}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </details>
+                  )
+                })}
+              </details>
+            )
+          })}
           <div className="admin-application-editor-actions">
             <button type="button" className="admin-details-button" onClick={() => {
               setValues(getApplicantFields(application))

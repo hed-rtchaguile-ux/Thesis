@@ -763,12 +763,49 @@
 
 .admin-application-editor-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin-top: 12px;
 }
 
-.admin-application-editor-form label {
+.admin-application-editor-person,
+.admin-application-editor-section {
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.admin-application-editor-person > summary,
+.admin-application-editor-section > summary {
+  padding: 10px 12px;
+  color: #53645d;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-application-editor-person[open] > summary {
+  border-bottom: 1px solid #e1e6e2;
+  color: #384b3d;
+}
+
+.admin-application-editor-section {
+  margin: 10px;
+  background: #f9faf9;
+}
+
+.admin-application-editor-section > summary {
+  color: #53689f;
+  font-weight: 600;
+}
+
+.admin-application-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.admin-application-editor-fields label {
   display: grid;
   gap: 5px;
   color: #53645d;
@@ -776,8 +813,9 @@
   font-weight: 700;
 }
 
-.admin-application-editor-form input,
-.admin-application-editor-form textarea {
+.admin-application-editor-fields input,
+.admin-application-editor-fields select,
+.admin-application-editor-fields textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 8px 9px;
@@ -794,7 +832,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  grid-column: 1 / -1;
 }
 
 .application-document-alert {
