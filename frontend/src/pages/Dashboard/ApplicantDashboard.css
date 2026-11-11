@@ -747,6 +747,9 @@
 }
 
 .admin-application-editor {
+  width: 100%;
+  max-width: 430px;
+  box-sizing: border-box;
   margin: 12px 0;
   padding: 12px;
   border: 1px solid rgba(125, 136, 168, 0.18);

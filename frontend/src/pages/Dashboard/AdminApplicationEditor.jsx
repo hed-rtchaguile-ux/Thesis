@@ -52,23 +52,25 @@ function getApplicantFields(application) {
       [`${person}Email`]: application[`${person}Email`],
     }
     Object.entries(rootFields).forEach(([key, value]) => {
-      if (!(key in fields) && value) fields[key] = String(value)
+      if ((!fields[key] || !fields[key].trim()) && value) fields[key] = String(value)
     })
 
-    const hasNameParts = [`${person}FirstName`, `${person}LastName`].some((key) => key in fields)
-    const hasDateParts = [`${person}DobDay`, `${person}DobMonth`, `${person}DobYear`].some((key) => key in fields)
+    const hasNameParts = [`${person}FirstName`, `${person}LastName`]
+      .some((key) => fields[key]?.trim())
+    const hasDateParts = [`${person}DobDay`, `${person}DobMonth`, `${person}DobYear`]
+      .some((key) => fields[key]?.trim())
     if (hasNameParts) delete fields[`${person}FullName`]
     if (hasDateParts) delete fields[`${person}Dob`]
     if (`${person}Age` in fields) delete fields[`${person}Age`]
-    if ([`${person}ResidenceHouseNo`, `${person}ResidenceStreet`].some((key) => key in fields)) {
+    if ([`${person}ResidenceHouseNo`, `${person}ResidenceStreet`].some((key) => fields[key]?.trim())) {
       delete fields[`${person}Residence`]
     }
-    if ([`${person}BirthPlaceCity`, `${person}BirthPlaceProvince`].some((key) => key in fields)) {
+    if ([`${person}BirthPlaceCity`, `${person}BirthPlaceProvince`].some((key) => fields[key]?.trim())) {
       delete fields[`${person}PlaceOfBirth`]
     }
   }
 
-  return fields
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value.trim() !== ''))
 }
 
 function formatFieldLabel(key) {
@@ -131,6 +133,7 @@ export default function AdminApplicationEditor({ application, onSaved }) {
       <summary>Edit applicant information</summary>
       {isEditing ? (
         <form className="admin-application-editor-form" onSubmit={saveApplicantInformation}>
+          {Object.keys(values).length === 0 && <p>No applicant information was provided to edit.</p>}
           {['groom', 'bride'].map((person) => {
             const personFields = Object.keys(values).filter((key) => key.startsWith(person))
             if (personFields.length === 0) return null
@@ -192,7 +195,7 @@ export default function AdminApplicationEditor({ application, onSaved }) {
               setError('')
               setIsEditing(false)
             }}>Cancel</button>
-            <button type="submit" className="admin-document-accept" disabled={isSaving}>
+            <button type="submit" className="admin-document-accept" disabled={isSaving || Object.keys(values).length === 0}>
               {isSaving ? 'Saving...' : 'Save applicant information'}
             </button>
           </div>
