@@ -7,8 +7,8 @@ import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
 const personStepLabels = ['Name', 'Birth details', 'Residence & contact', 'Marital history', 'Father details', 'Mother details', 'Person who gave advice', 'Documents']
-const MAX_DOCUMENT_FILE_BYTES = 5 * 1024 * 1024
-const MAX_TOTAL_DOCUMENT_BYTES = 10 * 1024 * 1024
+const MAX_DOCUMENT_FILE_BYTES = 20 * 1024 * 1024
+const MAX_TOTAL_DOCUMENT_BYTES = 50 * 1024 * 1024
 const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024
 const FIXED_PAYMENT_METHOD = 'Over the counter (Cash)'
 const FIXED_PAYMENT_AMOUNT = '₱ 250.00'
@@ -1300,7 +1300,7 @@ export default function ApplicantRegistration() {
     if (!selectedFile) return
     event.target.value = ''
     if (selectedFile.size > MAX_DOCUMENT_FILE_BYTES) {
-      setValidationErrors((current) => ({ ...current, [key]: 'Each file must be 5 MB or smaller.' }))
+      setValidationErrors((current) => ({ ...current, [key]: 'Each file must be 20 MB or smaller.' }))
       return
     }
 
@@ -1317,7 +1317,7 @@ export default function ApplicantRegistration() {
         }, 0)
 
       if (currentTotalBytes + processedFile.size > MAX_TOTAL_DOCUMENT_BYTES) {
-        throw new Error('All application documents together must be 8 MB or smaller.')
+        throw new Error('All application documents together must be 50 MB or smaller.')
       }
 
       setDocuments((current) => ({

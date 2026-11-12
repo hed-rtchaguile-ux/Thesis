@@ -12,6 +12,7 @@ const actionLabels = {
   'database.backup.downloaded': 'Database backup downloaded',
   'database.backup.restored': 'Database backup restored',
 }
+const MAX_DATABASE_BACKUP_BYTES = 100 * 1024 * 1024
 
 function formatAuditDetails(details = {}) {
   return Object.entries(details)
@@ -132,12 +133,10 @@ export default function AdminAccountMenu({ basePath, displayName }) {
     setAuditActionError('')
     setAuditActionMessage('')
     try {
-      const backupText = await backupFile.text()
-      try {
-        JSON.parse(backupText)
-      } catch {
-        throw new Error('The selected file is not valid JSON.')
+      if (backupFile.size > MAX_DATABASE_BACKUP_BYTES) {
+        throw new Error('Database backup files must be 100 MB or smaller.')
       }
+      const backupText = await backupFile.text()
       const confirmed = window.confirm(
         `Restore "${backupFile.name}"? This replaces data in the collections included in the backup. Newer records may be lost. Account passwords are not stored in backups and will be preserved for matching existing accounts.`,
       )

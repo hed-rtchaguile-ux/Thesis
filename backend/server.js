@@ -21,6 +21,8 @@ const BACKEND_PORT = process.env.PORT || 5000;
 const DNS_PORT = Number(process.env.DNS_PORT || 5353);
 const DNS_HOST = process.env.DNS_HOST || '127.0.0.1';
 const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
+const APPLICATION_REQUEST_BODY_LIMIT = '75mb';
+const DATABASE_RESTORE_BODY_LIMIT = '100mb';
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI;
 const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'));
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
@@ -125,7 +127,28 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '15mb' }));
+const defaultJsonParser = express.json({ limit: '15mb' });
+const applicationSubmissionJsonParser = express.json({ limit: APPLICATION_REQUEST_BODY_LIMIT });
+const databaseRestoreTextParser = express.text({ type: 'application/json', limit: DATABASE_RESTORE_BODY_LIMIT });
+app.use((req, res, next) => {
+  const isDatabaseRestore = req.method === 'POST' && req.path === '/api/admin/database-restore';
+  const isApplicationSubmission = req.method === 'POST' && req.path === '/api/applications';
+  const parser = isDatabaseRestore
+    ? databaseRestoreTextParser
+    : isApplicationSubmission
+      ? applicationSubmissionJsonParser
+      : defaultJsonParser;
+  parser(req, res, (error) => {
+    if (error?.type === 'entity.too.large') {
+      const message = isDatabaseRestore
+        ? 'Database backup files must be 100 MB or smaller.'
+        : 'Application documents together must be 50 MB or smaller.';
+      return res.status(413).json({ message });
+    }
+    if (error) return next(error);
+    next();
+  });
+});
 
 async function connectToDatabase() {
   if (!DATABASE_CONNECTION_STRING) {
@@ -319,7 +342,7 @@ app.post('/api/admin/database-restore', requireRoles(['admin', 'superadmin']), a
     const ejson = mongoose.mongo.BSON.EJSON;
     let backup;
     try {
-      backup = ejson.parse(JSON.stringify(req.body));
+      backup = ejson.parse(req.body);
     } catch {
       return res.status(400).json({ message: 'The selected file is not valid JSON.' });
     }
@@ -359,7 +382,7 @@ app.post('/api/admin/database-restore', requireRoles(['admin', 'superadmin']), a
         return res.status(400).json({ message: `The backup data for ${name} is invalid.` });
       }
 
-      const documents = ejson.parse(ejson.stringify(sourceDocuments, null, 0, { relaxed: false }));
+      const documents = sourceDocuments;
       const seenIds = new Set();
       const seenAppointmentSlots = new Set();
       for (const document of documents) {
