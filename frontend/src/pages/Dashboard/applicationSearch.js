@@ -67,6 +67,7 @@ export function getAppointmentWorkflowLabel(application) {
   }
   if (application.firstCounselingCompletedAt) return '1st Counseling completed'
   if (attendanceStatus === 'attended') {
+    if (!getFirstCounselingTime(application)) return 'First appointment complete · 1st Counseling time pending'
     return `1st Counseling · ${getFirstCounselingDate(application) || 'Scheduled'}`
   }
   if (attendanceStatus === 'no-show') return 'First appointment · No-show'

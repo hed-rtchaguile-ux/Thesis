@@ -2014,7 +2014,8 @@
 }
 
 .admin-second-appointment form button,
-.admin-second-appointment .admin-posting-approve {
+.admin-second-appointment .admin-posting-approve,
+.admin-second-appointment .admin-appointment-workflow-actions button {
   min-height: 36px;
   padding: 8px 12px;
   border: 0;
@@ -2026,7 +2027,8 @@
   cursor: pointer;
 }
 
-.admin-second-appointment form button:disabled {
+.admin-second-appointment form button:disabled,
+.admin-second-appointment .admin-appointment-workflow-actions button:disabled {
   cursor: wait;
   opacity: 0.55;
 }
@@ -2042,7 +2044,7 @@
   gap: 8px;
 }
 
-.admin-second-appointment form button.admin-appointment-decline {
+.admin-second-appointment button.admin-appointment-decline {
   border: 1px solid rgba(155, 74, 74, 0.28);
   color: #8d4343;
   background: #fff;

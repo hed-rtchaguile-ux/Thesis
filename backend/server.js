@@ -681,11 +681,13 @@ async function sendDueSecondAppointmentReminders() {
           {
             firstAppointmentAttendanceStatus: 'attended',
             firstCounselingDate: { $gt: today, $lte: reminderThroughDate },
+            firstCounselingTime: { $exists: true, $ne: '' },
           },
           {
             firstAppointmentAttendanceStatus: { $exists: false },
             firstCounselingApprovedAt: { $exists: true },
             secondAppointmentDate: { $gt: today, $lte: reminderThroughDate },
+            secondAppointmentTime: { $exists: true, $ne: '' },
           },
         ],
       },
@@ -1725,19 +1727,14 @@ app.put('/api/applications/:id/first-appointment/attendance', requireRoles(['adm
       },
       $unset: {
         'notificationReads.firstAppointmentNoShow': 1,
+        'notificationReads.firstAppointmentApproved': 1,
         'notificationReads.firstCounselingScheduled': 1,
       },
     };
     let counselingDate;
     if (attendanceStatus === 'attended') {
-      const { time } = req.body;
-      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
-        return res.status(400).json({ message: 'Choose a valid first counseling appointment time.' });
-      }
       counselingDate = getNextLastWednesday(firstDateKey, todayKey);
       update.$set.firstCounselingDate = counselingDate;
-      update.$set.firstCounselingTime = time;
-      update.$unset['notificationReads.firstCounselingScheduled'] = 1;
     }
 
     const updatedApplication = await Application.findOneAndUpdate(
@@ -1754,16 +1751,16 @@ app.put('/api/applications/:id/first-appointment/attendance', requireRoles(['adm
 
     const coupleNames = getCoupleNames(updatedApplication);
     const title = attendanceStatus === 'attended'
-      ? 'First counseling scheduled'
+      ? 'First appointment approved'
       : 'First appointment marked not attended';
     const message = attendanceStatus === 'attended'
-      ? `Your attendance at the first appointment for ${coupleNames} is confirmed. Your first counseling is scheduled for ${formatApplicantNotificationDate(updatedApplication.firstCounselingDate, updatedApplication.firstCounselingTime)}.`
+      ? `Your first appointment for ${coupleNames} is complete. Your first counseling is planned for ${formatApplicantNotificationDate(updatedApplication.firstCounselingDate)}; the office will confirm the time.`
       : `The first appointment for ${coupleNames} was marked as not attended. Your application remains active. Please contact the office to reschedule.`;
     const notificationDelivery = await sendApplicantNotification(
       updatedApplication,
       title,
       message,
-      attendanceStatus === 'attended' ? 'firstCounselingScheduled' : 'firstAppointmentNoShow',
+      attendanceStatus === 'attended' ? 'firstAppointmentApproved' : 'firstAppointmentNoShow',
     );
     await recordAdminAction(req, {
       action: attendanceStatus === 'attended' ? 'appointment.first.attendance-approved' : 'appointment.first.no-show',
@@ -1771,13 +1768,93 @@ app.put('/api/applications/:id/first-appointment/attendance', requireRoles(['adm
       targetId: updatedApplication._id.toString(),
       targetLabel: getCoupleNames(updatedApplication),
       details: attendanceStatus === 'attended'
-        ? { attendanceStatus, firstCounselingDate: updatedApplication.firstCounselingDate, firstCounselingTime: updatedApplication.firstCounselingTime }
+        ? { attendanceStatus, firstCounselingDate: updatedApplication.firstCounselingDate }
         : { attendanceStatus },
     });
     res.set('Cache-Control', 'no-store');
     res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
     respondToAdminMutationError(res, error, 'Unable to record first appointment attendance.');
+  }
+});
+
+app.put('/api/applications/:id/first-counseling/schedule', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const application = await Application.findById(req.params.id).lean();
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+    if (application.status === 'Rejected') {
+      return res.status(409).json({ message: 'A rejected application cannot schedule counseling.' });
+    }
+
+    const legacyAttendanceApproved = !application.firstAppointmentAttendanceStatus
+      && application.firstCounselingApprovedAt
+      && application.secondAppointmentDate;
+    if (application.firstAppointmentAttendanceStatus !== 'attended' && !legacyAttendanceApproved) {
+      return res.status(409).json({ message: 'Approve the first appointment before scheduling the first counseling.' });
+    }
+    if (application.firstCounselingCompletedAt || application.postingStartDate) {
+      return res.status(409).json({ message: 'The first counseling is already complete.' });
+    }
+
+    const date = application.firstCounselingDate || application.secondAppointmentDate;
+    const time = String(req.body.time || '').trim();
+    if (!date) return res.status(409).json({ message: 'Approve the first appointment before scheduling counseling.' });
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      return res.status(400).json({ message: 'Choose a valid first counseling appointment time.' });
+    }
+    if (hasAppointmentPassed(date, time)) {
+      return res.status(409).json({ message: 'Choose a counseling time that has not passed yet.' });
+    }
+
+    const updatedApplication = await Application.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: { $ne: 'Rejected' },
+        firstCounselingCompletedAt: { $exists: false },
+        postingStartDate: { $exists: false },
+        $or: [
+          { firstAppointmentAttendanceStatus: 'attended' },
+          {
+            firstAppointmentAttendanceStatus: { $exists: false },
+            firstCounselingApprovedAt: { $exists: true },
+            secondAppointmentDate: { $exists: true },
+          },
+        ],
+      },
+      {
+        $set: { firstCounselingTime: time },
+        $unset: {
+          'notificationReads.firstAppointmentApproved': 1,
+          'notificationReads.firstCounselingScheduled': 1,
+          secondAppointmentReminderClaimedAt: 1,
+          secondAppointmentReminderSentAt: 1,
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    if (!updatedApplication) return res.status(409).json({ message: 'The first counseling could not be scheduled. Refresh the application and try again.' });
+
+    const coupleNames = getCoupleNames(updatedApplication);
+    const notificationDelivery = await sendApplicantNotification(
+      updatedApplication,
+      'First counseling scheduled',
+      `Your first counseling for ${coupleNames} is scheduled for ${formatApplicantNotificationDate(updatedApplication.firstCounselingDate || updatedApplication.secondAppointmentDate, updatedApplication.firstCounselingTime)}.`,
+      'firstCounselingScheduled',
+    );
+    await recordAdminAction(req, {
+      action: 'appointment.first-counseling.scheduled',
+      targetType: 'application',
+      targetId: updatedApplication._id.toString(),
+      targetLabel: coupleNames,
+      details: {
+        firstCounselingDate: updatedApplication.firstCounselingDate || updatedApplication.secondAppointmentDate,
+        firstCounselingTime: updatedApplication.firstCounselingTime,
+      },
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...updatedApplication, notificationDelivery });
+  } catch (error) {
+    respondToAdminMutationError(res, error, 'Unable to schedule the first counseling.');
   }
 });
 
@@ -2095,7 +2172,7 @@ app.put('/api/applications/:id/documents/:documentKey', requireRoles(['admin', '
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(submitted|appointment|firstAppointmentNoShow|firstCounselingScheduled|postingStarted|firstCounselingApproved|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|firstAppointmentApproved|firstAppointmentNoShow|firstCounselingScheduled|postingStarted|firstCounselingApproved|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

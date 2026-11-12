@@ -66,7 +66,16 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       )
     }
 
-    if (attendanceStatus === 'attended' && getFirstCounselingDate(application)) {
+    if (attendanceStatus === 'attended' && getFirstCounselingDate(application) && !getFirstCounselingTime(application)) {
+      addNotification(
+        'firstAppointmentApproved',
+        'First appointment complete',
+        `Your attendance at the first appointment for ${coupleNames} is confirmed. Your first counseling is planned for ${formatNotificationDate(getFirstCounselingDate(application))}; the office will confirm the time.`,
+        'View application',
+      )
+    }
+
+    if (attendanceStatus === 'attended' && getFirstCounselingDate(application) && getFirstCounselingTime(application)) {
       addNotification(
         'firstCounselingScheduled',
         'First counseling scheduled',
