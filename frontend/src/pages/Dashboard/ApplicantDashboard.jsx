@@ -4,6 +4,7 @@ import { apiFetch, useAuth } from '../auth'
 import DocumentPreview from './DocumentPreview'
 import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
+import { getFirstAppointmentAttendanceStatus, getFirstCounselingDate, getFirstCounselingTime } from './applicationSearch'
 import { getDocumentLabel, isHiddenMarriageLicenseDocument } from './documentLabels'
 import './ApplicantDashboard.css'
 
@@ -489,10 +490,16 @@ export default function ApplicantDashboard() {
                         <span className="application-label">Appointment</span>
                         <strong>{formatNotificationDate(item.appointmentDate, item.appointmentTime)}</strong>
                       </div>
-                      {item.secondAppointmentDate && (
+                      {getFirstCounselingDate(item) && (
                         <div>
-                          <span className="application-label">Counseling appointment</span>
-                          <strong>{formatNotificationDate(item.secondAppointmentDate, item.secondAppointmentTime)}</strong>
+                          <span className="application-label">1st Counseling</span>
+                          <strong>{formatNotificationDate(getFirstCounselingDate(item), getFirstCounselingTime(item))}</strong>
+                        </div>
+                      )}
+                      {item.postingStartDate && (
+                        <div>
+                          <span className="application-label">10-day posting</span>
+                          <strong>Started {formatNotificationDate(item.postingStartDate)} · Release {formatNotificationDate(item.licenseReleaseDate)}</strong>
                         </div>
                       )}
                       {getFlaggedDocuments(item).length > 0 && <div className="application-document-alert"><span className="application-label">Document action</span><strong>{getFlaggedDocuments(item).length} document(s) need redo</strong></div>}
@@ -601,7 +608,9 @@ export default function ApplicantDashboard() {
                   {selectedApplication.appointmentTime && <p><strong>Scheduled time:</strong> {selectedApplication.appointmentTime}</p>}
                   {selectedApplication.appointmentLocation && <p><strong>Location:</strong> {selectedApplication.appointmentLocation}</p>}
                   <p><strong>Status:</strong> {selectedApplication.status || 'For Review'}</p>
-                  {selectedApplication.secondAppointmentDate && <p><strong>Counseling appointment:</strong> {formatNotificationDate(selectedApplication.secondAppointmentDate, selectedApplication.secondAppointmentTime)}</p>}
+                  {getFirstAppointmentAttendanceStatus(selectedApplication) && <p><strong>First appointment attendance:</strong> {getFirstAppointmentAttendanceStatus(selectedApplication) === 'attended' ? 'Confirmed' : 'Not attended'}</p>}
+                  {getFirstCounselingDate(selectedApplication) && <p><strong>1st Counseling:</strong> {formatNotificationDate(getFirstCounselingDate(selectedApplication), getFirstCounselingTime(selectedApplication))}</p>}
+                  {selectedApplication.postingStartDate && <p><strong>10-day posting started:</strong> {formatNotificationDate(selectedApplication.postingStartDate)}</p>}
                   {selectedApplication.licenseReleaseDate && <p><strong>Marriage license release:</strong> {formatNotificationDate(selectedApplication.licenseReleaseDate)}</p>}
                 </details>
 

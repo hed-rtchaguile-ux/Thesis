@@ -66,6 +66,12 @@ const applicationSchema = new mongoose.Schema({
   appointmentDate: String,
   appointmentTime: String,
   appointmentLocation: String,
+  firstAppointmentAttendanceStatus: String,
+  firstAppointmentAttendanceAt: Date,
+  firstCounselingDate: String,
+  firstCounselingTime: String,
+  firstCounselingCompletedAt: Date,
+  postingStartDate: String,
   secondAppointmentDate: String,
   secondAppointmentTime: String,
   firstCounselingApprovedAt: Date,
@@ -669,9 +675,22 @@ async function sendDueSecondAppointmentReminders() {
   const today = getManilaDateKey();
   const reminderThroughDate = addDaysToDateKey(today, 3);
   const applications = await Application.find({
-    firstCounselingApprovedAt: { $exists: true },
-    secondAppointmentDate: { $gt: today, $lte: reminderThroughDate },
-    secondAppointmentReminderSentAt: { $exists: false },
+    $and: [
+      {
+        $or: [
+          {
+            firstAppointmentAttendanceStatus: 'attended',
+            firstCounselingDate: { $gt: today, $lte: reminderThroughDate },
+          },
+          {
+            firstAppointmentAttendanceStatus: { $exists: false },
+            firstCounselingApprovedAt: { $exists: true },
+            secondAppointmentDate: { $gt: today, $lte: reminderThroughDate },
+          },
+        ],
+      },
+      { secondAppointmentReminderSentAt: { $exists: false } },
+    ],
   }).lean();
   const staleClaimBefore = new Date(Date.now() - 10 * 60 * 1000);
 
@@ -692,9 +711,9 @@ async function sendDueSecondAppointmentReminders() {
 
     const notification = await sendApplicantNotification(
       application,
-      'Counseling appointment reminder',
-      `This is a reminder that your second counseling appointment is scheduled for ${formatApplicantNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
-      'secondAppointmentReminder',
+      'First counseling appointment reminder',
+      `This is a reminder that your first counseling appointment is scheduled for ${formatApplicantNotificationDate(application.firstCounselingDate || application.secondAppointmentDate, application.firstCounselingTime || application.secondAppointmentTime)}.`,
+      'firstCounselingReminder',
     );
     if (notification.email.status === 'accepted') {
       await Application.updateOne(
@@ -1380,6 +1399,12 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     delete applicantFields.secondAppointmentDate;
     delete applicantFields.secondAppointmentTime;
     delete applicantFields.firstCounselingApprovedAt;
+    delete applicantFields.firstAppointmentAttendanceStatus;
+    delete applicantFields.firstAppointmentAttendanceAt;
+    delete applicantFields.firstCounselingDate;
+    delete applicantFields.firstCounselingTime;
+    delete applicantFields.firstCounselingCompletedAt;
+    delete applicantFields.postingStartDate;
     delete applicantFields.secondAppointmentReminderClaimedAt;
     delete applicantFields.secondAppointmentReminderSentAt;
     delete applicantFields.appointmentSlotKey;
@@ -1663,10 +1688,13 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
   }
 });
 
-app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin', 'superadmin']), async (req, res) => {
+app.put('/api/applications/:id/first-appointment/attendance', requireRoles(['admin', 'superadmin']), async (req, res) => {
   try {
     const application = await Application.findById(req.params.id).lean();
     if (!application) return res.status(404).json({ message: 'Application not found.' });
+    if (application.status === 'Rejected') {
+      return res.status(409).json({ message: 'A rejected application cannot be advanced through appointments.' });
+    }
 
     const hasAssignedFirstAppointment = application.appointmentDate && application.appointmentDate !== 'To be assigned by office';
     const firstDateValue = hasAssignedFirstAppointment
@@ -1678,69 +1706,155 @@ app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin',
     const firstDateKey = toAppointmentDateKey(firstDateValue);
     const todayKey = getManilaDateKey();
     if (!firstDateKey || !hasAppointmentPassed(firstDateKey, firstTimeValue)) {
-      return res.status(409).json({ message: 'The first counseling can be approved after the scheduled appointment date and time have passed.' });
+      return res.status(409).json({ message: 'Attendance can be recorded after the scheduled first appointment date and time have passed.' });
     }
 
-    const { time } = req.body;
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
-      return res.status(400).json({ message: 'Choose a valid counseling appointment time.' });
+    const attendanceStatus = String(req.body.attendanceStatus || '').trim();
+    if (!['attended', 'no-show'].includes(attendanceStatus)) {
+      return res.status(400).json({ message: 'Choose whether the applicant attended the first appointment.' });
+    }
+    if (application.firstAppointmentAttendanceStatus
+      || (application.firstCounselingApprovedAt && application.secondAppointmentDate)) {
+      return res.status(409).json({ message: 'Attendance for the first appointment has already been recorded.' });
     }
 
-    if (application.firstCounselingApprovedAt) {
-      return res.status(409).json({ message: 'The first counseling has already been approved.' });
+    const update = {
+      $set: {
+        firstAppointmentAttendanceStatus: attendanceStatus,
+        firstAppointmentAttendanceAt: new Date(),
+      },
+      $unset: {
+        'notificationReads.firstAppointmentNoShow': 1,
+        'notificationReads.firstCounselingScheduled': 1,
+      },
+    };
+    let counselingDate;
+    if (attendanceStatus === 'attended') {
+      const { time } = req.body;
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || ''))) {
+        return res.status(400).json({ message: 'Choose a valid first counseling appointment time.' });
+      }
+      counselingDate = getNextLastWednesday(firstDateKey, todayKey);
+      update.$set.firstCounselingDate = counselingDate;
+      update.$set.firstCounselingTime = time;
+      update.$unset['notificationReads.firstCounselingScheduled'] = 1;
     }
 
-    const secondDateKey = getNextLastWednesday(firstDateKey, todayKey);
     const updatedApplication = await Application.findOneAndUpdate(
-      { _id: req.params.id, firstCounselingApprovedAt: { $exists: false } },
+      {
+        _id: req.params.id,
+        status: { $ne: 'Rejected' },
+        firstAppointmentAttendanceStatus: { $exists: false },
+        firstCounselingApprovedAt: { $exists: false },
+      },
+      update,
+      { new: true, runValidators: true },
+    ).lean();
+    if (!updatedApplication) return res.status(409).json({ message: 'Attendance for the first appointment has already been recorded.' });
+
+    const coupleNames = getCoupleNames(updatedApplication);
+    const title = attendanceStatus === 'attended'
+      ? 'First counseling scheduled'
+      : 'First appointment marked not attended';
+    const message = attendanceStatus === 'attended'
+      ? `Your attendance at the first appointment for ${coupleNames} is confirmed. Your first counseling is scheduled for ${formatApplicantNotificationDate(updatedApplication.firstCounselingDate, updatedApplication.firstCounselingTime)}.`
+      : `The first appointment for ${coupleNames} was marked as not attended. Your application remains active. Please contact the office to reschedule.`;
+    const notificationDelivery = await sendApplicantNotification(
+      updatedApplication,
+      title,
+      message,
+      attendanceStatus === 'attended' ? 'firstCounselingScheduled' : 'firstAppointmentNoShow',
+    );
+    await recordAdminAction(req, {
+      action: attendanceStatus === 'attended' ? 'appointment.first.attendance-approved' : 'appointment.first.no-show',
+      targetType: 'application',
+      targetId: updatedApplication._id.toString(),
+      targetLabel: getCoupleNames(updatedApplication),
+      details: attendanceStatus === 'attended'
+        ? { attendanceStatus, firstCounselingDate: updatedApplication.firstCounselingDate, firstCounselingTime: updatedApplication.firstCounselingTime }
+        : { attendanceStatus },
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...updatedApplication, notificationDelivery });
+  } catch (error) {
+    respondToAdminMutationError(res, error, 'Unable to record first appointment attendance.');
+  }
+});
+
+app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const application = await Application.findById(req.params.id).lean();
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+    if (application.status === 'Rejected') {
+      return res.status(409).json({ message: 'A rejected application cannot be advanced through counseling.' });
+    }
+
+    const legacyAttendanceApproved = !application.firstAppointmentAttendanceStatus
+      && application.firstCounselingApprovedAt
+      && application.secondAppointmentDate;
+    if (application.firstAppointmentAttendanceStatus !== 'attended' && !legacyAttendanceApproved) {
+      return res.status(409).json({ message: 'Confirm attendance at the first appointment before approving counseling.' });
+    }
+    if (application.firstCounselingCompletedAt || application.postingStartDate) {
+      return res.status(409).json({ message: 'The 10-day posting has already been started.' });
+    }
+
+    const counselingDate = application.firstCounselingDate || application.secondAppointmentDate;
+    const counselingTime = application.firstCounselingTime || application.secondAppointmentTime;
+    if (!counselingDate || !hasAppointmentPassed(counselingDate, counselingTime)) {
+      return res.status(409).json({ message: 'The first counseling can be approved after its scheduled date and time have passed.' });
+    }
+
+    const postingStartDate = getManilaDateKey();
+    const releaseDate = addDaysToDateKey(postingStartDate, 10);
+    const updatedApplication = await Application.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: { $ne: 'Rejected' },
+        firstCounselingCompletedAt: { $exists: false },
+        postingStartDate: { $exists: false },
+        $or: [
+          { firstAppointmentAttendanceStatus: 'attended' },
+          {
+            firstAppointmentAttendanceStatus: { $exists: false },
+            firstCounselingApprovedAt: { $exists: true },
+            secondAppointmentDate: { $exists: true },
+          },
+        ],
+      },
       {
         $set: {
-          firstCounselingApprovedAt: new Date(),
-          secondAppointmentDate: secondDateKey,
-          secondAppointmentTime: time,
+          firstCounselingCompletedAt: new Date(),
+          postingStartDate,
+          licenseReleaseDate: releaseDate,
         },
         $unset: {
-          'notificationReads.firstCounselingApproved': 1,
-          'notificationReads.secondAppointment': 1,
-          secondAppointmentReminderClaimedAt: 1,
-          secondAppointmentReminderSentAt: 1,
+          'notificationReads.postingStarted': 1,
+          'notificationReads.licenseRelease': 1,
         },
       },
       { new: true, runValidators: true },
     ).lean();
-    if (!updatedApplication) return res.status(409).json({ message: 'The first counseling has already been approved.' });
+    if (!updatedApplication) return res.status(409).json({ message: 'The 10-day posting has already been started.' });
+
+    const coupleNames = getCoupleNames(updatedApplication);
+    const notificationDelivery = await sendApplicantNotification(
+      updatedApplication,
+      '10-day posting started',
+      `The 10-day posting for ${coupleNames} begins on ${formatApplicantNotificationDate(postingStartDate)}. Your marriage license is scheduled for release on ${formatApplicantNotificationDate(releaseDate)}.`,
+      'postingStarted',
+    );
     await recordAdminAction(req, {
-      action: 'appointment.first.approved',
+      action: 'application.posting.started',
       targetType: 'application',
       targetId: updatedApplication._id.toString(),
-      targetLabel: getCoupleNames(updatedApplication),
-      details: {
-        secondAppointmentDate: updatedApplication.secondAppointmentDate,
-        secondAppointmentTime: updatedApplication.secondAppointmentTime,
-      },
+      targetLabel: coupleNames,
+      details: { postingStartDate, releaseDate },
     });
-    const coupleNames = getCoupleNames(updatedApplication);
-    const firstCounselingNotification = await sendApplicantNotification(
-      updatedApplication,
-      'First counseling approved',
-      `The first counseling for ${coupleNames} has been approved. Your second counseling appointment is scheduled for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}.`,
-      'firstCounselingApproved',
-    );
-    const secondAppointmentNotification = await sendApplicantNotification(
-      updatedApplication,
-      'Second counseling appointment scheduled',
-      `Your second counseling appointment for ${coupleNames} is set for ${formatApplicantNotificationDate(updatedApplication.secondAppointmentDate, updatedApplication.secondAppointmentTime)}. We will send you an email reminder three days before the appointment.`,
-      'secondAppointment',
-    );
-    res.json({
-      ...updatedApplication,
-      notificationDelivery: {
-        firstCounseling: firstCounselingNotification,
-        secondAppointment: secondAppointmentNotification,
-      },
-    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...updatedApplication, notificationDelivery });
   } catch (error) {
-    respondToAdminMutationError(res, error, 'Unable to approve the first counseling and schedule the second counseling.');
+    respondToAdminMutationError(res, error, 'Unable to start the 10-day posting.');
   }
 });
 
@@ -1981,7 +2095,7 @@ app.put('/api/applications/:id/documents/:documentKey', requireRoles(['admin', '
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(submitted|appointment|firstCounselingApproved|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|firstAppointmentNoShow|firstCounselingScheduled|postingStarted|firstCounselingApproved|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

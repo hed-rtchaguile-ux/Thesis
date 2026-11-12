@@ -7,7 +7,15 @@ import SecondAppointmentControl from './SecondAppointmentControl'
 import AdminApplicationEditor from './AdminApplicationEditor'
 import AdminAccountMenu from './AdminAccountMenu'
 import { ReportCards } from './AdminTools'
-import { filterApplications, filterApplicationsByStatus, getApplicationWorkflowStatus, getAppointmentDate, getAppointmentTime, sortAppointments } from './applicationSearch'
+import {
+  filterApplications,
+  filterApplicationsByStatus,
+  getApplicationWorkflowStatus,
+  getAppointmentDate,
+  getAppointmentTime,
+  getAppointmentWorkflowLabel,
+  sortAppointments,
+} from './applicationSearch'
 import { getDocumentLabel, isHiddenMarriageLicenseDocument } from './documentLabels'
 import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark-small.png'
@@ -321,11 +329,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                         <div className="admin-application-statuses">
                           <small className={`admin-workflow-status status-${getApplicationWorkflowStatus(application).toLowerCase().replace(/\s+/g, '-')}`}>{getApplicationWorkflowStatus(application)}</small>
                           {getAppointmentDate(application) && (
-                            <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
-                              {application.firstCounselingApprovedAt
-                                ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
-                                : '1st Counseling'}
-                            </small>
+                            <small className="admin-counseling-status first-counseling">{getAppointmentWorkflowLabel(application)}</small>
                           )}
                         </div>
                       )}

@@ -42,6 +42,37 @@ export function getAppointmentTime(application) {
   return getAppointmentDate(application) ? getFirstAppointmentTime(application) : ''
 }
 
+export function getFirstAppointmentAttendanceStatus(application) {
+  if (application.firstAppointmentAttendanceStatus) return application.firstAppointmentAttendanceStatus
+  if (application.firstCounselingApprovedAt && application.secondAppointmentDate) return 'attended'
+  return ''
+}
+
+export function getFirstCounselingDate(application) {
+  return application.firstCounselingDate
+    || (application.firstCounselingApprovedAt ? application.secondAppointmentDate : '')
+    || ''
+}
+
+export function getFirstCounselingTime(application) {
+  return application.firstCounselingTime
+    || (application.firstCounselingApprovedAt ? application.secondAppointmentTime : '')
+    || ''
+}
+
+export function getAppointmentWorkflowLabel(application) {
+  const attendanceStatus = getFirstAppointmentAttendanceStatus(application)
+  if (application.postingStartDate) {
+    return `10-day posting · release ${application.licenseReleaseDate || 'pending'}`
+  }
+  if (application.firstCounselingCompletedAt) return '1st Counseling completed'
+  if (attendanceStatus === 'attended') {
+    return `1st Counseling · ${getFirstCounselingDate(application) || 'Scheduled'}`
+  }
+  if (attendanceStatus === 'no-show') return 'First appointment · No-show'
+  return 'First appointment'
+}
+
 function getAppointmentTimeKey(value) {
   const normalizedValue = String(value || '').trim()
   const twentyFourHourTime = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(normalizedValue)

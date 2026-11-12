@@ -1,4 +1,9 @@
 import { isHiddenMarriageLicenseDocument } from './documentLabels'
+import {
+  getFirstAppointmentAttendanceStatus,
+  getFirstCounselingDate,
+  getFirstCounselingTime,
+} from './applicationSearch'
 
 export function formatNotificationDate(value, time = '') {
   if (!value || value === 'To be assigned by office') return 'None'
@@ -51,21 +56,31 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       )
     }
 
-    if (application.firstCounselingApprovedAt) {
+    const attendanceStatus = getFirstAppointmentAttendanceStatus(application)
+    if (attendanceStatus === 'no-show') {
       addNotification(
-        'firstCounselingApproved',
-        'First counseling approved',
-        `Your first counseling has been approved. Your second counseling is scheduled for ${formatNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
+        'firstAppointmentNoShow',
+        'First appointment not attended',
+        `The first appointment for ${coupleNames} was marked as not attended. Your application remains active. Please contact the office to reschedule.`,
+        'View application',
+      )
+    }
+
+    if (attendanceStatus === 'attended' && getFirstCounselingDate(application)) {
+      addNotification(
+        'firstCounselingScheduled',
+        'First counseling scheduled',
+        `Your first counseling is scheduled for ${formatNotificationDate(getFirstCounselingDate(application), getFirstCounselingTime(application))}.`,
         'View counseling appointment',
       )
     }
 
-    if (application.secondAppointmentDate) {
+    if (application.postingStartDate) {
       addNotification(
-        'secondAppointment',
-        'Counseling appointment scheduled',
-        `Your second appointment for counseling is set for ${formatNotificationDate(application.secondAppointmentDate, application.secondAppointmentTime)}.`,
-        'View counseling appointment',
+        'postingStarted',
+        '10-day posting started',
+        `The 10-day posting for ${coupleNames} began on ${formatNotificationDate(application.postingStartDate)}. Your marriage license is scheduled for release on ${formatNotificationDate(application.licenseReleaseDate)}.`,
+        'View application',
       )
     }
 

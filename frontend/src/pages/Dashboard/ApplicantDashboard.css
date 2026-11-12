@@ -1989,7 +1989,7 @@
 
 .admin-second-appointment form {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(140px, 1fr) auto;
   align-items: end;
   gap: 10px;
 }
@@ -2013,7 +2013,8 @@
   font: inherit;
 }
 
-.admin-second-appointment form button {
+.admin-second-appointment form button,
+.admin-second-appointment .admin-posting-approve {
   min-height: 36px;
   padding: 8px 12px;
   border: 0;
@@ -2028,6 +2029,23 @@
 .admin-second-appointment form button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.admin-second-appointment .admin-posting-approve:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.admin-appointment-workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-second-appointment form button.admin-appointment-decline {
+  border: 1px solid rgba(155, 74, 74, 0.28);
+  color: #8d4343;
+  background: #fff;
 }
 
 .admin-second-appointment-note {
