@@ -42,6 +42,40 @@ export function getAppointmentTime(application) {
   return getAppointmentDate(application) ? getFirstAppointmentTime(application) : ''
 }
 
+function getAppointmentTimeKey(value) {
+  const normalizedValue = String(value || '').trim()
+  const twentyFourHourTime = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(normalizedValue)
+  if (twentyFourHourTime) return `${twentyFourHourTime[1]}:${twentyFourHourTime[2]}:${twentyFourHourTime[3] || '00'}`
+
+  const twelveHourTime = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i.exec(normalizedValue)
+  if (!twelveHourTime) return ''
+  const hour = Number(twelveHourTime[1])
+  if (hour < 1 || hour > 12) return ''
+  const convertedHour = hour % 12 + (twelveHourTime[3].toUpperCase() === 'PM' ? 12 : 0)
+  return `${String(convertedHour).padStart(2, '0')}:${twelveHourTime[2]}:00`
+}
+
+function getManilaDateTimeKey(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:${dateParts.second}`
+}
+
+export function hasAppointmentPassed(dateKey, time, now = new Date()) {
+  if (!dateKey) return false
+  const appointmentTimeKey = getAppointmentTimeKey(time) || '23:59:59'
+  return `${dateKey}T${appointmentTimeKey}` < getManilaDateTimeKey(now)
+}
+
 function getAppointmentTimeValue(value) {
   const normalizedValue = String(value || '').trim()
   const twelveHourTime = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(normalizedValue)

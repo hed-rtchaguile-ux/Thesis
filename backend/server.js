@@ -586,6 +586,40 @@ function getManilaDateKey(date = new Date()) {
   return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
 }
 
+function getManilaDateTimeKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:${dateParts.second}`;
+}
+
+function toAppointmentTimeKey(value) {
+  const normalized = String(value || '').trim();
+  const twentyFourHourTime = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(normalized);
+  if (twentyFourHourTime) return `${twentyFourHourTime[1]}:${twentyFourHourTime[2]}:${twentyFourHourTime[3] || '00'}`;
+
+  const twelveHourTime = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i.exec(normalized);
+  if (!twelveHourTime) return '';
+  const hour = Number(twelveHourTime[1]);
+  if (hour < 1 || hour > 12) return '';
+  const convertedHour = hour % 12 + (twelveHourTime[3].toUpperCase() === 'PM' ? 12 : 0);
+  return `${String(convertedHour).padStart(2, '0')}:${twelveHourTime[2]}:00`;
+}
+
+function hasAppointmentPassed(dateKey, time, now = new Date()) {
+  if (!dateKey) return false;
+  const appointmentTimeKey = toAppointmentTimeKey(time) || '23:59:59';
+  return `${dateKey}T${appointmentTimeKey}` < getManilaDateTimeKey(now);
+}
+
 function toAppointmentDateKey(value) {
   const normalized = String(value || '').trim();
   let dateKey = normalized;
@@ -1634,13 +1668,17 @@ app.put('/api/applications/:id/first-counseling/approve', requireRoles(['admin',
     const application = await Application.findById(req.params.id).lean();
     if (!application) return res.status(404).json({ message: 'Application not found.' });
 
-    const firstDateValue = application.appointmentDate && application.appointmentDate !== 'To be assigned by office'
+    const hasAssignedFirstAppointment = application.appointmentDate && application.appointmentDate !== 'To be assigned by office';
+    const firstDateValue = hasAssignedFirstAppointment
       ? application.appointmentDate
       : application.preferredAppointmentDate;
+    const firstTimeValue = hasAssignedFirstAppointment
+      ? application.appointmentTime
+      : application.preferredAppointmentTime || application.appointmentTime;
     const firstDateKey = toAppointmentDateKey(firstDateValue);
     const todayKey = getManilaDateKey();
-    if (!firstDateKey || firstDateKey >= todayKey) {
-      return res.status(409).json({ message: 'The first appointment can be approved after its scheduled date has passed.' });
+    if (!firstDateKey || !hasAppointmentPassed(firstDateKey, firstTimeValue)) {
+      return res.status(409).json({ message: 'The first counseling can be approved after the scheduled appointment date and time have passed.' });
     }
 
     const { time } = req.body;

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiFetch } from '../auth'
-import { getFirstAppointmentDate, getAppointmentTime } from './applicationSearch'
+import { getFirstAppointmentDate, getAppointmentTime, hasAppointmentPassed } from './applicationSearch'
 
 function dateKey(value) {
   const normalized = String(value || '').trim()
@@ -15,25 +15,20 @@ function dateKey(value) {
     : ''
 }
 
-function todayKey() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
-  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
-}
-
 export default function SecondAppointmentControl({ application, onSaved, canApproveFirstCounseling = false }) {
   const firstDate = dateKey(getFirstAppointmentDate(application))
-  const today = todayKey()
-  const firstAppointmentPassed = Boolean(firstDate && firstDate < today)
+  const [now, setNow] = useState(() => new Date())
   const [time, setTime] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(new Date()), 30000)
+    return () => window.clearInterval(clock)
+  }, [])
+
+  const firstAppointmentPassed = hasAppointmentPassed(firstDate, getAppointmentTime(application), now)
 
   async function approveFirstCounseling(event) {
     event.preventDefault()
@@ -64,22 +59,22 @@ export default function SecondAppointmentControl({ application, onSaved, canAppr
   }
 
   return (
-    <section className="admin-second-appointment" aria-label="First appointment approval and second counseling">
+    <section className="admin-second-appointment" aria-label="First counseling approval">
       <div className="admin-second-appointment-heading">
-        <h4>1st appointment · 2nd counseling</h4>
+        <h4>1st counseling</h4>
         {application.firstCounselingApprovedAt && <span>Approved</span>}
       </div>
       {!firstDate
         ? <p>Set the first appointment date before approving it.</p>
         : application.firstCounselingApprovedAt
-          ? <p>Second counseling: {application.secondAppointmentDate} at {application.secondAppointmentTime}. An email reminder is scheduled for three days before.</p>
+          ? <p>First counseling approved. Second counseling: {application.secondAppointmentDate} at {application.secondAppointmentTime}. An email reminder is scheduled for three days before.</p>
           : !firstAppointmentPassed
             ? <p>Approval is available after the first appointment ({firstDate}{getAppointmentTime(application) ? ` at ${getAppointmentTime(application)}` : ''}) has passed.</p>
             : canApproveFirstCounseling
               ? <form onSubmit={approveFirstCounseling}>
-                <p className="admin-second-appointment-note">Approving confirms the first appointment and automatically schedules the second counseling on the next last Wednesday of the month.</p>
+                <p className="admin-second-appointment-note">Approving the first counseling automatically schedules the second counseling on the next last Wednesday of the month.</p>
                 <label>2nd counseling time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
-                <button type="submit" disabled={!time || saving}>{saving ? 'Approving...' : 'Approve 1st Appointment & Schedule 2nd Counseling'}</button>
+                <button type="submit" disabled={!time || saving}>{saving ? 'Approving...' : 'Approve 1st Counseling & Schedule 2nd Counseling'}</button>
               </form>
               : <p>Waiting for an admin to approve the first appointment.</p>}
       {error && <p className="admin-appointment-error" role="alert">{error}</p>}

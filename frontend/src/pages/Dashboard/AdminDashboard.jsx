@@ -173,7 +173,7 @@ export default function AdminDashboard({ view = 'dashboard' }) {
                             <small className={`admin-counseling-status ${application.firstCounselingApprovedAt ? 'second-counseling' : 'first-counseling'}`}>
                               {application.firstCounselingApprovedAt
                                 ? `2nd Counseling · ${application.secondAppointmentDate || 'Scheduled'}`
-                                : '1st Appointment'}
+                                : '1st Counseling'}
                             </small>
                           )}
                         </div>

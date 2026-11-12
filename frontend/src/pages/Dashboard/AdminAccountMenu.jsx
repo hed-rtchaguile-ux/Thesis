@@ -5,7 +5,7 @@ import { apiFetch, useAuth } from '../auth'
 const actionLabels = {
   'application.information.updated': 'Applicant information updated',
   'application.status.updated': 'Application status updated',
-  'appointment.first.approved': 'First appointment approved',
+  'appointment.first.approved': 'First counseling approved',
   'appointment.second.updated': 'Second appointment updated',
   'document.review.updated': 'Document review updated',
   'document.replaced': 'Application document replaced',
