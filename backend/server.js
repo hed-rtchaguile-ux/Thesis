@@ -311,6 +311,166 @@ app.get('/api/admin/database-backup', requireRoles(['admin', 'superadmin']), asy
   }
 });
 
+app.post('/api/admin/database-restore', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    if (isDatabaseUnavailable(res, 'Database restore')) return;
+
+    const database = mongoose.connection.db;
+    const ejson = mongoose.mongo.BSON.EJSON;
+    let backup;
+    try {
+      backup = ejson.parse(JSON.stringify(req.body));
+    } catch {
+      return res.status(400).json({ message: 'The selected file is not valid JSON.' });
+    }
+    if (
+      backup?.format !== 'wedrings-mongodb-extended-json-backup'
+      || backup.version !== 1
+      || !backup.collections
+      || typeof backup.collections !== 'object'
+      || Array.isArray(backup.collections)
+    ) {
+      return res.status(400).json({ message: 'The selected file is not a supported WedRings database backup.' });
+    }
+    if (backup.database !== database.databaseName) {
+      return res.status(400).json({ message: 'This backup belongs to a different database.' });
+    }
+
+    const entries = Object.entries(backup.collections);
+    if (entries.length === 0) {
+      return res.status(400).json({ message: 'The selected backup does not contain any collections.' });
+    }
+
+    const existingNames = new Set(
+      (await database.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name),
+    );
+    const allowedAccountRoles = {
+      applicant_accounts: 'applicant',
+      admin_accounts: 'admin',
+      superadmin_accounts: 'superadmin',
+    };
+    const restoredCollections = {};
+
+    for (const [name, sourceDocuments] of entries) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(name) || name.startsWith('system.') || !existingNames.has(name)) {
+        return res.status(400).json({ message: `The backup contains an unsupported collection: ${name}.` });
+      }
+      if (!Array.isArray(sourceDocuments)) {
+        return res.status(400).json({ message: `The backup data for ${name} is invalid.` });
+      }
+
+      const documents = ejson.parse(ejson.stringify(sourceDocuments, null, 0, { relaxed: false }));
+      const seenIds = new Set();
+      const seenAppointmentSlots = new Set();
+      for (const document of documents) {
+        if (!document || typeof document !== 'object' || Array.isArray(document) || document._id == null) {
+          return res.status(400).json({ message: `The backup contains an invalid document in ${name}.` });
+        }
+        const id = String(document._id);
+        if (seenIds.has(id)) {
+          return res.status(400).json({ message: `The backup contains duplicate document IDs in ${name}.` });
+        }
+        seenIds.add(id);
+
+        if (name === 'applications' && document.appointmentSlotKey) {
+          if (seenAppointmentSlots.has(document.appointmentSlotKey)) {
+            return res.status(400).json({ message: 'The backup contains duplicate appointment slots.' });
+          }
+          seenAppointmentSlots.add(document.appointmentSlotKey);
+        }
+
+        const expectedRole = allowedAccountRoles[name];
+        if (expectedRole && document.role !== expectedRole) {
+          return res.status(400).json({ message: `The backup contains an invalid role in ${name}.` });
+        }
+      }
+      restoredCollections[name] = documents;
+    }
+
+    const actorCollectionName = `${req.user.role}_accounts`;
+    const actorAccountIsInBackup = restoredCollections[actorCollectionName]?.some(
+      (account) => String(account._id) === String(req.user.id),
+    );
+    if (restoredCollections[actorCollectionName] && !actorAccountIsInBackup) {
+      return res.status(400).json({ message: 'The backup does not contain your administrator account, so it cannot be restored while you are signed in.' });
+    }
+
+    const session = await mongoose.connection.startSession();
+    let restoredRecordCount = 0;
+    try {
+      await session.withTransaction(async () => {
+        restoredRecordCount = 0;
+        for (const [name, documents] of Object.entries(restoredCollections)) {
+          let safeDocuments = documents;
+          if (allowedAccountRoles[name]) {
+            const collection = database.collection(name);
+            const currentAccounts = await collection.find(
+              { _id: { $in: documents.map(({ _id }) => _id) } },
+              { session },
+            ).toArray();
+            const currentById = new Map(currentAccounts.map((account) => [String(account._id), account]));
+            if (currentAccounts.length !== documents.length) {
+              const missingCredentialCount = documents.filter((document) => !currentById.has(String(document._id))).length;
+              if (missingCredentialCount > 0) {
+                const error = new Error('This backup contains accounts that no longer exist. Restore was cancelled because their passwords are not present in the backup.');
+                error.code = 'ACCOUNT_RESTORE_UNAVAILABLE';
+                throw error;
+              }
+            }
+
+            safeDocuments = documents.map((document) => {
+              const currentAccount = currentById.get(String(document._id));
+              const restoredAccount = { ...document, passwordHash: currentAccount.passwordHash };
+              delete restoredAccount.passwordResetTokenHash;
+              delete restoredAccount.passwordResetExpiresAt;
+              delete restoredAccount.passwordResetCodeHash;
+              delete restoredAccount.passwordResetCodeAttempts;
+              return restoredAccount;
+            });
+          }
+
+          const collection = database.collection(name);
+          await collection.deleteMany({}, { session });
+          if (safeDocuments.length > 0) {
+            await collection.insertMany(safeDocuments, { session, ordered: true });
+          }
+          restoredRecordCount += safeDocuments.length;
+        }
+
+        await database.collection('audit_logs').insertOne({
+          actorId: req.user.id,
+          actorName: req.user.name,
+          actorEmail: req.user.email,
+          actorRole: req.user.role,
+          action: 'database.backup.restored',
+          targetType: 'database',
+          targetLabel: database.databaseName,
+          details: {
+            collectionCount: entries.length,
+            recordCount: restoredRecordCount,
+          },
+          createdAt: new Date(),
+        }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      message: 'Database restored successfully.',
+      collectionCount: entries.length,
+      recordCount: restoredRecordCount,
+    });
+  } catch (error) {
+    if (error.code === 'ACCOUNT_RESTORE_UNAVAILABLE') {
+      return res.status(400).json({ message: error.message });
+    }
+    console.error('Unable to restore database backup:', error.message);
+    res.status(500).json({ message: 'Unable to restore the database backup.' });
+  }
+});
+
 function isRateLimited(requestWindows, key, limit, windowMilliseconds) {
   const now = Date.now();
   for (const [requestKey, window] of requestWindows) {
@@ -1099,12 +1259,6 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
       return res.status(400).json({ message: 'Enter a valid appointment time.' });
     }
 
-    const existingApplication = await Application.exists({ applicantEmail: req.user.email });
-    if (existingApplication) {
-      return res.status(409).json({
-        message: 'This account already has an application. Request its deletion and wait for admin approval before applying again.',
-      });
-    }
     const occupiedTimes = await getOccupiedAppointmentTimes(preferredAppointmentDate);
     if (occupiedTimes.has(preferredAppointmentTime)) {
       return res.status(409).json({ message: 'That appointment time is no longer available. Choose another time.' });
@@ -1152,7 +1306,7 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
     if (!accountClaim) {
       claimedApplicationId = null;
       return res.status(409).json({
-        message: 'This account already has an application in progress. Contact the office if you need help submitting another one.',
+        message: 'An application submission is already in progress for this account. Wait a moment and try again.',
       });
     }
 
@@ -1176,6 +1330,11 @@ app.post('/api/applications', requireRoles(['applicant']), async (req, res) => {
       paymentAmount: FIXED_PAYMENT_AMOUNT,
       applicationData,
     });
+    await ApplicantAccount.updateOne(
+      { _id: req.user.id, activeApplicationId: claimedApplicationId },
+      { $unset: { activeApplicationId: 1, activeApplicationClaimedAt: 1 } },
+    );
+    claimedApplicationId = null;
     const notificationDelivery = await sendApplicantNotification(
       application,
       'Application received',

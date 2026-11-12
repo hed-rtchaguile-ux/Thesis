@@ -517,7 +517,6 @@ export default function ApplicantRegistration() {
   const [form, setForm] = useState(initialForm)
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [draftError, setDraftError] = useState('')
-  const [applicationEligibility, setApplicationEligibility] = useState('checking')
   const [customDropdownFields, setCustomDropdownFields] = useState({})
   const [documents, setDocuments] = useState({})
   const [processingDocuments, setProcessingDocuments] = useState({})
@@ -597,7 +596,7 @@ export default function ApplicantRegistration() {
   }, [draftUserEmail])
 
   useEffect(() => {
-    if (!draftLoaded || !draftUserEmail || applicationEligibility !== 'available') return undefined
+    if (!draftLoaded || !draftUserEmail) return undefined
 
     const timeout = window.setTimeout(() => {
       saveRegistrationDraft({
@@ -615,26 +614,7 @@ export default function ApplicantRegistration() {
     }, 400)
 
     return () => window.clearTimeout(timeout)
-  }, [applicationEligibility, customDropdownFields, documents, draftLoaded, draftUserEmail, form, personStep, step])
-
-  useEffect(() => {
-    let active = true
-    apiFetch('/api/applications')
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Unable to verify whether this account can apply.')
-        return response.json()
-      })
-      .then((records) => {
-        if (active) setApplicationEligibility(records.length > 0 ? 'blocked' : 'available')
-      })
-      .catch(() => {
-        if (active) setApplicationEligibility('error')
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
+  }, [customDropdownFields, documents, draftLoaded, draftUserEmail, form, personStep, step])
 
   useEffect(() => {
     let active = true
@@ -677,18 +657,6 @@ export default function ApplicantRegistration() {
       active = false
     }
   }, [appointmentSlotsRefresh, draftLoaded, form.appointmentDate])
-
-  async function checkApplicationEligibility() {
-    setApplicationEligibility('checking')
-    try {
-      const response = await apiFetch('/api/applications')
-      if (!response.ok) throw new Error('Unable to verify whether this account can apply.')
-      const records = await response.json()
-      setApplicationEligibility(records.length > 0 ? 'blocked' : 'available')
-    } catch {
-      setApplicationEligibility('error')
-    }
-  }
 
   function handleLogout() {
     if (draftUserEmail) {
@@ -2056,19 +2024,8 @@ export default function ApplicantRegistration() {
         </div>
 
         <section className="registration-card">
-          {!draftLoaded || applicationEligibility === 'checking' ? (
-            <p role="status">{!draftLoaded ? 'Restoring your saved application form...' : 'Checking whether this account can start an application...'}</p>
-          ) : applicationEligibility === 'error' ? (
-            <div className="application-eligibility-message">
-              <p role="alert">We couldn't verify whether this account already has an application. Please try again.</p>
-              <button type="button" className="primary-button" onClick={() => void checkApplicationEligibility()}>Try again</button>
-            </div>
-          ) : applicationEligibility === 'blocked' ? (
-            <div className="application-eligibility-message">
-              <h2>This account already has an application</h2>
-              <p>Request deletion from your applicant dashboard. You can apply again after an admin approves the request.</p>
-              <button type="button" className="secondary-button" onClick={() => navigate('/applicant/dashboard')}>Go to my applications</button>
-            </div>
+          {!draftLoaded ? (
+            <p role="status">Restoring your saved application form...</p>
           ) : (
           <>
           {draftError && <p className="form-error" role="alert">{draftError}</p>}
