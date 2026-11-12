@@ -23,6 +23,8 @@ const DNS_HOST = process.env.DNS_HOST || '127.0.0.1';
 const ALLOWED_FRONTEND_ORIGIN = 'http://localhost:5173';
 const APPLICATION_REQUEST_BODY_LIMIT = '75mb';
 const DATABASE_RESTORE_BODY_LIMIT = '100mb';
+const MAX_APPLICATION_DOCUMENT_BYTES = 20 * 1024 * 1024;
+const MAX_MONGODB_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const DATABASE_CONNECTION_STRING = process.env.MONGODB_URI;
 const APP_AUTH_TOKEN_SECRET = process.env.APP_AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'));
 const AUTH_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
@@ -133,16 +135,20 @@ const databaseRestoreTextParser = express.text({ type: 'application/json', limit
 app.use((req, res, next) => {
   const isDatabaseRestore = req.method === 'POST' && req.path === '/api/admin/database-restore';
   const isApplicationSubmission = req.method === 'POST' && req.path === '/api/applications';
+  const isAdminDocumentReplacement = req.method === 'PUT'
+    && /^\/api\/applications\/[^/]+\/documents\/[^/]+$/.test(req.path);
   const parser = isDatabaseRestore
     ? databaseRestoreTextParser
-    : isApplicationSubmission
+    : isApplicationSubmission || isAdminDocumentReplacement
       ? applicationSubmissionJsonParser
       : defaultJsonParser;
   parser(req, res, (error) => {
     if (error?.type === 'entity.too.large') {
       const message = isDatabaseRestore
         ? 'Database backup files must be 100 MB or smaller.'
-        : 'Application documents together must be 50 MB or smaller.';
+        : isAdminDocumentReplacement
+          ? 'Replacement documents must be 20 MB or smaller.'
+          : 'Application documents together must be 50 MB or smaller.';
       return res.status(413).json({ message });
     }
     if (error) return next(error);
@@ -1854,6 +1860,83 @@ app.put('/api/applications/:id/documents/:documentKey/review', requireRoles(['ad
     res.json(application);
   } catch (error) {
     respondToAdminMutationError(res, error, 'Unable to update document review.');
+  }
+});
+
+app.put('/api/applications/:id/documents/:documentKey', requireRoles(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const { documentKey } = req.params;
+    const { document } = req.body;
+    if (!/^[A-Za-z0-9_-]+$/.test(documentKey)) {
+      return res.status(400).json({ message: 'Invalid document key.' });
+    }
+
+    const dataUrlMatch = typeof document === 'string'
+      ? /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,([A-Za-z0-9+/]+={0,2})$/.exec(document)
+      : null;
+    if (!dataUrlMatch) {
+      return res.status(400).json({ message: 'Choose a JPEG, PNG, WebP, or PDF document.' });
+    }
+
+    const documentBytes = Buffer.from(dataUrlMatch[2], 'base64');
+    if (documentBytes.length === 0 || documentBytes.toString('base64') !== dataUrlMatch[2]) {
+      return res.status(400).json({ message: 'The selected document is invalid.' });
+    }
+    if (documentBytes.length > MAX_APPLICATION_DOCUMENT_BYTES) {
+      return res.status(413).json({ message: 'Replacement documents must be 20 MB or smaller.' });
+    }
+
+    const existingApplication = await Application.findById(req.params.id);
+    if (!existingApplication) return res.status(404).json({ message: 'Application not found.' });
+    if (!existingApplication.documents?.has(documentKey)) {
+      return res.status(404).json({ message: 'Document not found in this application.' });
+    }
+
+    const updatedApplicationData = existingApplication.toObject({ flattenMaps: true });
+    updatedApplicationData.documents[documentKey] = document;
+    updatedApplicationData.documentReviews = updatedApplicationData.documentReviews || {};
+    updatedApplicationData.documentReviews[documentKey] = 'Accepted';
+    if (updatedApplicationData.documentReviewNotes) {
+      delete updatedApplicationData.documentReviewNotes[documentKey];
+    }
+    if (updatedApplicationData.notificationReads) {
+      delete updatedApplicationData.notificationReads[`redo-${documentKey}`];
+    }
+    if (mongoose.mongo.BSON.calculateObjectSize(updatedApplicationData) > MAX_MONGODB_DOCUMENT_BYTES) {
+      return res.status(413).json({
+        message: 'This application cannot store the replacement document because its complete record would exceed the database size limit. Choose a smaller file.',
+      });
+    }
+
+    const application = await Application.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          [`documents.${documentKey}`]: document,
+          [`documentReviews.${documentKey}`]: 'Accepted',
+        },
+        $unset: {
+          [`documentReviewNotes.${documentKey}`]: 1,
+          [`notificationReads.redo-${documentKey}`]: 1,
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!application) return res.status(404).json({ message: 'Application not found.' });
+
+    await recordAdminAction(req, {
+      action: 'document.replaced',
+      targetType: 'application',
+      targetId: application._id.toString(),
+      targetLabel: getCoupleNames(application),
+      details: { documentKey, reviewStatus: 'Accepted', replacementBytes: documentBytes.length },
+    });
+
+    res.set('Cache-Control', 'no-store');
+    res.json(application);
+  } catch (error) {
+    respondToAdminMutationError(res, error, 'Unable to replace the application document.');
   }
 });
 

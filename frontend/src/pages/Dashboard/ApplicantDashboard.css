@@ -1377,6 +1377,47 @@
   opacity: 0.5;
 }
 
+.admin-document-replace {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 1px solid #aeb9d1;
+  border-radius: 5px;
+  color: #53689f;
+  background: #f2f5fc;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-document-replace:focus-within {
+  outline: 2px solid #7f8dbd;
+  outline-offset: 2px;
+}
+
+.admin-document-replace input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-document-replace.is-disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.admin-document-action-error {
+  margin-top: 8px !important;
+  color: #9b4a4a;
+  font-size: 11px;
+}
+
 .quick-actions {
   margin-top: 20px;
 }

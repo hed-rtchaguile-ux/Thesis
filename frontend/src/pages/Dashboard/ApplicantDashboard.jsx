@@ -60,7 +60,11 @@ export default function ApplicantDashboard() {
 
     refreshApplications()
     const refreshTimer = window.setInterval(refreshApplications, 30000)
-    return () => window.clearInterval(refreshTimer)
+    window.addEventListener('focus', refreshApplications)
+    return () => {
+      window.clearInterval(refreshTimer)
+      window.removeEventListener('focus', refreshApplications)
+    }
   }, [user.email])
 
   const applicantNotifications = getApplicantNotifications(applications, true)

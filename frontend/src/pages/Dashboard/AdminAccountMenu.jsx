@@ -8,6 +8,7 @@ const actionLabels = {
   'appointment.first.approved': 'First appointment approved',
   'appointment.second.updated': 'Second appointment updated',
   'document.review.updated': 'Document review updated',
+  'document.replaced': 'Application document replaced',
   'license.release-date.updated': 'License release date updated',
   'database.backup.downloaded': 'Database backup downloaded',
   'database.backup.restored': 'Database backup restored',

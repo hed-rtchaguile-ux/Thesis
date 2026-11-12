@@ -1751,7 +1751,7 @@ export default function ApplicantRegistration() {
         <div className="formal-box-title">{title}</div>
       </div>
       <p className="section-subtitle">
-        Each photo or PDF can be up to 5 MB. Photos are compressed automatically. All uploaded files together must be 10 MB or smaller.
+        Each photo or PDF can be up to 20 MB. Photos are compressed automatically. All uploaded files together must be 50 MB or smaller.
       </p>
 
       <div className="document-grid">

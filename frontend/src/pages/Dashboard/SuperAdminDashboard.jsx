@@ -13,6 +13,21 @@ import { printExcelForm } from './printExcelForm'
 import logoImage from '../../assets/wedrings-mark-small.png'
 import './ApplicantDashboard.css'
 
+const MAX_DOCUMENT_FILE_BYTES = 20 * 1024 * 1024
+const ALLOWED_DOCUMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('Unable to read this file.'))
+    }
+    reader.onerror = () => reject(reader.error || new Error('Unable to read this file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
 function getAppointmentDateKey(value) {
   if (!value || value === 'To be assigned by office') return ''
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
@@ -39,6 +54,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const detailsRequestRef = useRef(0)
   const [updatingDocumentKey, setUpdatingDocumentKey] = useState('')
+  const [documentActionErrors, setDocumentActionErrors] = useState({})
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [loadError, setLoadError] = useState('')
@@ -124,18 +140,72 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   }
 
   async function updateDocumentReview(applicationId, documentKey, reviewStatus, reviewNote = '') {
+    const actionErrorKey = `${applicationId}:${documentKey}`
     setUpdatingDocumentKey(documentKey)
+    setDocumentActionErrors((currentErrors) => ({ ...currentErrors, [actionErrorKey]: '' }))
     try {
       const response = await apiFetch(`/api/applications/${applicationId}/documents/${documentKey}/review`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reviewStatus, reviewNote }),
       })
-      if (!response.ok) throw new Error('Unable to update document review.')
       const updatedApplication = await response.json()
+      if (!response.ok) throw new Error(updatedApplication.message || 'Unable to update document review.')
       setApplications((currentApplications) => currentApplications.map((application) => (
         application._id === updatedApplication._id ? updatedApplication : application
       )))
+      setSelectedApplicationDetails((currentApplication) => (
+        currentApplication?._id === updatedApplication._id ? updatedApplication : currentApplication
+      ))
+    } catch (error) {
+      setDocumentActionErrors((currentErrors) => ({
+        ...currentErrors,
+        [actionErrorKey]: error.message || 'Unable to update document review.',
+      }))
+    } finally {
+      setUpdatingDocumentKey('')
+    }
+  }
+
+  async function replaceApplicationDocument(applicationId, documentKey, file) {
+    const actionErrorKey = `${applicationId}:${documentKey}`
+    setDocumentActionErrors((currentErrors) => ({ ...currentErrors, [actionErrorKey]: '' }))
+    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
+      setDocumentActionErrors((currentErrors) => ({
+        ...currentErrors,
+        [actionErrorKey]: 'Choose a JPEG, PNG, WebP, or PDF file.',
+      }))
+      return
+    }
+    if (file.size > MAX_DOCUMENT_FILE_BYTES) {
+      setDocumentActionErrors((currentErrors) => ({
+        ...currentErrors,
+        [actionErrorKey]: 'The replacement file must be 20 MB or smaller.',
+      }))
+      return
+    }
+
+    setUpdatingDocumentKey(documentKey)
+    try {
+      const document = await readFileAsDataUrl(file)
+      const response = await apiFetch(`/api/applications/${applicationId}/documents/${documentKey}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document }),
+      })
+      const updatedApplication = await response.json()
+      if (!response.ok) throw new Error(updatedApplication.message || 'Unable to replace the application document.')
+      setApplications((currentApplications) => currentApplications.map((application) => (
+        application._id === updatedApplication._id ? updatedApplication : application
+      )))
+      setSelectedApplicationDetails((currentApplication) => (
+        currentApplication?._id === updatedApplication._id ? updatedApplication : currentApplication
+      ))
+    } catch (error) {
+      setDocumentActionErrors((currentErrors) => ({
+        ...currentErrors,
+        [actionErrorKey]: error.message || 'Unable to replace the application document.',
+      }))
     } finally {
       setUpdatingDocumentKey('')
     }
@@ -297,7 +367,9 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
                 application={selectedApplicationDetails}
                 canApproveFirstCounseling
                 updatingDocumentKey={updatingDocumentKey}
+                documentActionErrors={documentActionErrors}
                 onDocumentReview={updateDocumentReview}
+                onDocumentReplace={replaceApplicationDocument}
                 onAppointmentSaved={(updatedApplication) => {
                   setApplications((currentApplications) => currentApplications.map((item) => item._id === updatedApplication._id ? updatedApplication : item))
                   setSelectedApplicationDetails(updatedApplication)
@@ -314,7 +386,7 @@ export default function SuperAdminDashboard({ isAdmin = false }) {
   )
 }
 
-function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, onDocumentReview, onAppointmentSaved, onApplicationEdited }) {
+function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, updatingDocumentKey, documentActionErrors, onDocumentReview, onDocumentReplace, onAppointmentSaved, onApplicationEdited }) {
   const documents = Object.entries(application.documents || {}).filter(([key]) => !isHiddenMarriageLicenseDocument(key))
   const documentReviews = application.documentReviews || {}
 
@@ -337,7 +409,39 @@ function SuperAdminApplicationDetails({ application, canApproveFirstCounseling, 
       <AdminApplicationEditor application={application} onSaved={onApplicationEdited} />
       <SecondAppointmentControl application={application} onSaved={onAppointmentSaved} canApproveFirstCounseling={canApproveFirstCounseling} />
       <div className="admin-details-group"><h4>Marriage license release</h4><p><strong>Release date:</strong> {application.licenseReleaseDate || 'Not announced'}</p></div>
-        <div className="admin-details-group admin-document-review-list"><h4>Submitted documents</h4>{documents.length > 0 ? documents.map(([key, value]) => <details className="admin-document-review-row admin-document-disclosure" key={key}><summary><span>{getDocumentLabel(key)}</span><span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>{documentReviews[key] || 'Pending review'}</span></summary><DocumentPreview label={getDocumentLabel(key)} value={value} /><div className="admin-document-review-actions"><button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button><button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button></div></details>) : <p>No documents listed.</p>}</div>
+      <div className="admin-details-group admin-document-review-list">
+        <h4>Submitted documents</h4>
+        {documents.length > 0 ? documents.map(([key, value]) => (
+          <details className="admin-document-review-row admin-document-disclosure" key={key}>
+            <summary>
+              <span>{getDocumentLabel(key)}</span>
+              <span className={`document-review-status ${documentReviews[key] === 'Needs Redo' ? 'needs-redo' : documentReviews[key] === 'Accepted' ? 'accepted' : ''}`}>
+                {documentReviews[key] || 'Pending review'}
+              </span>
+            </summary>
+            <DocumentPreview label={getDocumentLabel(key)} value={value} />
+            <div className="admin-document-review-actions">
+              <button type="button" className="admin-document-accept" disabled={updatingDocumentKey === key} onClick={() => onDocumentReview(application._id, key, 'Accepted')}>Accept</button>
+              <button type="button" className="admin-document-flag" disabled={updatingDocumentKey === key} onClick={() => requestDocumentRedo(key)}>Needs redo</button>
+              <label className={`admin-document-replace${updatingDocumentKey === key ? ' is-disabled' : ''}`}>
+                Replace document
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  aria-label={`Replace ${getDocumentLabel(key)}`}
+                  disabled={updatingDocumentKey === key}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ''
+                    if (file) onDocumentReplace(application._id, key, file)
+                  }}
+                />
+              </label>
+            </div>
+            {documentActionErrors[`${application._id}:${key}`] && <p className="admin-document-action-error" role="alert">{documentActionErrors[`${application._id}:${key}`]}</p>}
+          </details>
+        )) : <p>No documents listed.</p>}
+      </div>
       <div className="admin-print-actions"><button type="button" className="admin-details-button" onClick={() => printExcelForm(application._id)}>Print form</button></div>
     </div>
   )
