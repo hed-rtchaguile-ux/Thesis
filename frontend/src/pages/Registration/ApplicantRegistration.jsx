@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getAllMunicipalities, getAllProvinces, getBarangaysByMunicipality, getMunicipalitiesByProvince } from '@aivangogh/ph-address'
 import { apiFetch, useAuth } from '../auth'
 import { appointmentTimeOptions, formatAppointmentTime } from '../../appointmentTimeSlots'
+import { getParentalRequirement } from '../../parentalRequirements'
 import './ApplicantRegistration.css'
 
 const stepLabels = ['Groom Info', 'Bride Info', 'Appointment', 'Payment', 'Review']
@@ -187,7 +188,8 @@ function getApplicantDocumentFields(form, applicant) {
     })
   }
 
-  if (age !== null && age >= 18 && age <= 23) {
+  const parentalRequirement = getParentalRequirement(age)
+  if (parentalRequirement === 'consent') {
     fields.push({
       key: `parentalConsent${applicantLabel}`,
       label: `Parental Consent (Photo) (${applicantLabel}) *`,
@@ -195,7 +197,7 @@ function getApplicantDocumentFields(form, applicant) {
     })
   }
 
-  if (age !== null && age >= 24 && age <= 27) {
+  if (parentalRequirement === 'advice') {
     fields.push({
       key: `parentalAdvice${applicantLabel}`,
       label: `Parental Advice (${applicantLabel}) *`,
@@ -540,10 +542,11 @@ export default function ApplicantRegistration() {
   const isPersonInformationStep = step === 1 || step === 2
   const person = step === 1 ? 'groom' : 'bride'
   const personAge = getAgeFromDob(person)
-  const skipsAdvisorStep = personAge !== null && (personAge < 18 || personAge >= 28)
-  const advisorStepTitle = personAge !== null && personAge >= 18 && personAge <= 23
+  const parentalRequirement = getParentalRequirement(personAge)
+  const skipsAdvisorStep = personAge !== null && (personAge < 18 || parentalRequirement === null)
+  const advisorStepTitle = parentalRequirement === 'consent'
     ? 'Person Who Gave Parental Consent'
-    : personAge !== null && personAge >= 24 && personAge <= 27
+    : parentalRequirement === 'advice'
       ? 'Person Who Gave Parental Advice'
       : 'Person Who Gave Consent or Advice'
   const displayedPersonStep = skipsAdvisorStep && personStep > 7 ? personStep - 1 : personStep
@@ -1156,7 +1159,7 @@ export default function ApplicantRegistration() {
 
     if (currentPersonStep === 7) {
       const age = getAgeFromDob(prefix)
-      const requiresAdvisorInfo = age !== null && age >= 18 && age <= 27
+      const requiresAdvisorInfo = getParentalRequirement(age) !== null
       validateLocationFields(errors, form, `${prefix}AdvisorResidence`, requiresAdvisorInfo)
 
       if (requiresAdvisorInfo) {
@@ -1171,7 +1174,7 @@ export default function ApplicantRegistration() {
           requiredAdvisorFields.push(`${prefix}AdvisorResidenceBarangay`)
         }
         requiredAdvisorFields.forEach((field) => {
-          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 27.'
+          if (!form[field] || !String(form[field]).trim()) errors[field] = 'Required for applicants age 18 to 24.'
         })
       }
     }
@@ -1735,7 +1738,7 @@ export default function ApplicantRegistration() {
             {personStep === 8 && (
               <>
                 <p className="section-subtitle">
-                  Upload this applicant’s documents. Applicants age 18 to 23 must attach a photo of parental consent. Applicants age 24 to 27 must attach parental advice. Applicants age 28 and older do not need parent-related documents.
+                  Upload this applicant’s documents. Applicants age 18 to 21 must attach a photo of parental consent. Applicants age 22 to 24 must attach parental advice. Applicants age 25 and older do not need parent-related documents.
                 </p>
                 {renderDocumentUpload(personDocumentFields, `${person === 'groom' ? 'Groom' : 'Bride'} Documents`)}
               </>
@@ -1913,6 +1916,12 @@ export default function ApplicantRegistration() {
         form[`${person}AdvisorCitizenship`],
         form[`${person}AdvisorResidenceCity`],
       ].filter(Boolean).join(' / ')
+      const parentalRequirement = getParentalRequirement(getAgeFromDob(person))
+      const advisorLabel = parentalRequirement === 'consent'
+        ? 'Person who gave parental consent'
+        : parentalRequirement === 'advice'
+          ? 'Person who gave parental advice'
+          : 'Person who gave consent/advice'
 
       return (
         <section className="review-section review-person" key={person}>
@@ -1931,7 +1940,7 @@ export default function ApplicantRegistration() {
             {renderReviewField('Email', form[`${person}Email`])}
             {renderReviewField('Father', fatherName)}
             {renderReviewField('Mother', motherName)}
-            {renderReviewField('Person who gave consent/advice', advisorInfo)}
+            {renderReviewField(advisorLabel, advisorInfo)}
             {renderReviewField('Previously married', form[`${person}PreviouslyMarried`])}
           </div>
         </section>

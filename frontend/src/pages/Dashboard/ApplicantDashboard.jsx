@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth } from '../auth'
+import { getParentalRequirement } from '../../parentalRequirements'
 import DocumentPreview from './DocumentPreview'
 import { printExcelForm } from './printExcelForm'
 import { formatNotificationDate, getApplicantNotifications } from './applicantNotifications'
@@ -344,7 +345,13 @@ export default function ApplicantDashboard() {
       if (!personMatch) return true
       const person = personMatch[1]
       if (/Dissolution/.test(field) && editForm[`${person}PreviouslyMarried`] !== 'Yes') return false
-      if (/Advisor|Consent|Advice/i.test(field) && getPersonAge(person) >= 28) return false
+      const age = getPersonAge(person)
+      if (age !== null) {
+        const parentalRequirement = getParentalRequirement(age)
+        if (/Advisor/i.test(field) && parentalRequirement === null) return false
+        if (/Consent/i.test(field) && parentalRequirement !== 'consent') return false
+        if (/Advice/i.test(field) && parentalRequirement !== 'advice') return false
+      }
       return true
     })
   }
