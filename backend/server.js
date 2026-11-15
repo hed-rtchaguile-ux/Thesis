@@ -86,6 +86,7 @@ const applicationSchema = new mongoose.Schema({
   documentReviewNotes: { type: Map, of: String },
   notificationReads: { type: Map, of: Date },
   status: { type: String, default: 'For Review' },
+  statusNotificationAt: Date,
   licenseReleaseDate: String,
 }, { timestamps: true });
 applicationSchema.index(
@@ -960,6 +961,17 @@ app.put('/api/auth/change-password', requireRoles(['applicant', 'admin', 'supera
 async function sendPasswordResetEmail(email, code) {
   const brevoApiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.SENDER_EMAIL;
+  const organizationName = process.env.SENDER_NAME || 'WedRings';
+  const subject = `Your ${organizationName} verification code`;
+  const text = [
+    `Your ${organizationName} verification code is:`,
+    '',
+    code,
+    '',
+    'This code expires in 10 minutes. If you did not request this, you can ignore this email.',
+    `${organizationName} staff will never ask you for this code by phone, email, or message.`,
+  ].join('\n');
+  const html = `<p>Your ${organizationName} verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p><p>${organizationName} staff will never ask you for this code by phone, email, or message.</p>`;
   if (brevoApiKey && senderEmail) {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -970,13 +982,13 @@ async function sendPasswordResetEmail(email, code) {
       },
       body: JSON.stringify({
         sender: {
-          name: process.env.SENDER_NAME || 'WedRings',
+          name: organizationName,
           email: senderEmail,
         },
         to: [{ email }],
-        subject: 'Your WedRings password reset code',
-        textContent: `Your password reset verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
-        htmlContent: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
+        subject,
+        textContent: text,
+        htmlContent: html,
       }),
     });
     const result = await response.json().catch(() => ({}));
@@ -1009,9 +1021,9 @@ async function sendPasswordResetEmail(email, code) {
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Your WedRings password reset code',
-    text: `Your password reset verification code is ${code}. It expires in 10 minutes.`,
-    html: `<p>Your password reset verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>`,
+    subject,
+    text,
+    html,
   });
 }
 
@@ -1652,8 +1664,12 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
       return res.status(404).json({ message: 'Application not found.' });
     }
 
+    const statusChanged = existingApplication.status !== status;
     const statusUpdate = { $set: { status } };
-    if (status === 'Rejected') statusUpdate.$unset = { 'notificationReads.rejected': 1 };
+    if (statusChanged) {
+      statusUpdate.$set.statusNotificationAt = new Date();
+      statusUpdate.$unset = { 'notificationReads.statusUpdate': 1 };
+    }
 
     const application = await Application.findByIdAndUpdate(
       req.params.id,
@@ -1673,13 +1689,28 @@ app.put('/api/applications/:id/status', requireRoles(['superadmin']), async (req
       details: { previousStatus: existingApplication.status, status },
     });
 
-    if (status === 'Rejected') {
+    if (statusChanged) {
       const coupleNames = getCoupleNames(application);
+      const statusNotifications = {
+        'For Review': {
+          title: 'Application under review',
+          message: `The marriage license application for ${coupleNames} is now under review. We will notify you if more information is needed.`,
+        },
+        Verified: {
+          title: 'Application verified',
+          message: `The marriage license application for ${coupleNames} has been verified. Please check your WedRings account for updates.`,
+        },
+        Rejected: {
+          title: 'Application needs updating',
+          message: `Your application for ${coupleNames} was rejected. Please contact the office for assistance.`,
+        },
+      };
+      const statusNotification = statusNotifications[status];
       const notificationDelivery = await sendApplicantNotification(
         application,
-        'Application needs updating',
-        `Your application for ${coupleNames} was rejected. Please contact the office for assistance.`,
-        'rejected',
+        statusNotification.title,
+        statusNotification.message,
+        'applicationStatus',
       );
       return res.json({ ...application, notificationDelivery });
     }
@@ -2172,7 +2203,7 @@ app.put('/api/applications/:id/documents/:documentKey', requireRoles(['admin', '
 app.put('/api/applications/:id/notifications/:notificationKey/read', requireRoles(['applicant']), async (req, res) => {
   try {
     const { notificationKey } = req.params;
-    if (!/^(submitted|appointment|firstAppointmentApproved|firstAppointmentNoShow|firstCounselingScheduled|postingStarted|firstCounselingApproved|secondAppointment|rejected|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
+    if (!/^(submitted|appointment|firstAppointmentApproved|firstAppointmentNoShow|firstCounselingScheduled|postingStarted|firstCounselingApproved|secondAppointment|rejected|statusUpdate|licenseRelease|redo-[A-Za-z0-9_-]+)$/.test(notificationKey)) {
       return res.status(400).json({ message: 'Invalid notification.' });
     }
 

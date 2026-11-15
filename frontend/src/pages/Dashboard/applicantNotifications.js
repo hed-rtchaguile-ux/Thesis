@@ -93,7 +93,25 @@ export function getApplicantNotifications(applications, unreadOnly = false) {
       )
     }
 
-    if (application.status === 'Rejected') {
+    const statusNotifications = {
+      'For Review': {
+        title: 'Application under review',
+        message: `The marriage license application for ${coupleNames} is now under review. We will notify you if more information is needed.`,
+      },
+      Verified: {
+        title: 'Application verified',
+        message: `The marriage license application for ${coupleNames} has been verified. Please check your WedRings account for updates.`,
+      },
+      Rejected: {
+        title: 'Application needs updating',
+        message: `Your application for ${coupleNames} was not approved. Please contact the office for assistance.`,
+      },
+    }
+
+    if (application.statusNotificationAt && statusNotifications[application.status]) {
+      const { title, message } = statusNotifications[application.status]
+      addNotification('statusUpdate', title, message, 'View application')
+    } else if (application.status === 'Rejected') {
       addNotification(
         'rejected',
         'Application needs updating',
